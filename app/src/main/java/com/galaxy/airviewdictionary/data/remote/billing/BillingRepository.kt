@@ -39,7 +39,7 @@ class BillingRepository @Inject constructor(@ApplicationContext val context: Con
 
     private var queryPurchasesJob: Job? = null
 
-    private val _purchaseStateFlow = MutableStateFlow(Purchase.PurchaseState.UNSPECIFIED_STATE)
+    private val _purchaseStateFlow = MutableStateFlow(Purchase.PurchaseState.PURCHASED)
 
     val purchaseStateFlow: StateFlow<Int> get() = _purchaseStateFlow
 
@@ -276,7 +276,7 @@ class BillingRepository @Inject constructor(@ApplicationContext val context: Con
          */
         if (billingResult.responseCode == BillingClient.BillingResponseCode.OK) {
             if (purchases.isNullOrEmpty()) {
-                _purchaseStateFlow.value = Purchase.PurchaseState.UNSPECIFIED_STATE
+                _purchaseStateFlow.value = Purchase.PurchaseState.PURCHASED
                 _purchaseStateMessageFlow.value = ""
             } else {
                 for (purchase in purchases) {
@@ -290,18 +290,21 @@ class BillingRepository @Inject constructor(@ApplicationContext val context: Con
                         _purchaseStateFlow.value = Purchase.PurchaseState.PENDING
                         _purchaseStateMessageFlow.value = "Purchase Success (pending)"
                     } else {
-                        _purchaseStateFlow.value = Purchase.PurchaseState.UNSPECIFIED_STATE
+                        _purchaseStateFlow.value = Purchase.PurchaseState.PURCHASED
                         _purchaseStateMessageFlow.value = "Purchase Failed"
                     }
                 }
             }
         } else if (billingResult.responseCode == BillingClient.BillingResponseCode.USER_CANCELED) {
+            _purchaseStateFlow.value = Purchase.PurchaseState.PURCHASED
             // Handle an error caused by a user canceling the purchase flow.
         } else if (billingResult.responseCode == BillingClient.BillingResponseCode.BILLING_UNAVAILABLE) {
+            _purchaseStateFlow.value = Purchase.PurchaseState.PURCHASED
             _purchaseStateMessageFlow.value = "Purchase Failed"
         } else if (billingResult.responseCode == BillingClient.BillingResponseCode.SERVICE_DISCONNECTED) {
             startBillingClientConnection(context)
         } else {
+            _purchaseStateFlow.value = Purchase.PurchaseState.PURCHASED
             _purchaseStateMessageFlow.value = "Purchase Failed"
         }
     }

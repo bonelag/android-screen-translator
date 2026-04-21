@@ -79,7 +79,10 @@
     <string name="settings_menu_reply_transparency">Reply Window Transparency</string>
     <string name="settings_menu_cat_tts">Text-to-Speech</string>
     <string name="settings_menu_tts_voices">TTS Voice</string>
+    <string name="settings_menu_tts_engine">TTS Engine</string>
+    <string name="settings_menu_tts_language">TTS Language</string>
     <string name="settings_menu_tts_rate">TTS Speed</string>
+    <string name="settings_menu_tts_pitch">TTS Pitch</string>
     <string name="settings_menu_cat_about">About</string>
     <string name="settings_menu_on_premium_free_trial">Currently on Premium free trial</string>
     <string name="settings_menu_premium_free_trial_remain">%1$d minutes left</string>

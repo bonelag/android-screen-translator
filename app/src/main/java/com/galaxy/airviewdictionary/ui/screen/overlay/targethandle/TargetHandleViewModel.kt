@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.android.billingclient.api.Purchase
 import com.galaxy.airviewdictionary.R
 import com.galaxy.airviewdictionary.data.local.capture.CapturePreventedException
 import com.galaxy.airviewdictionary.data.local.capture.CaptureRepository
@@ -30,7 +29,6 @@ import com.galaxy.airviewdictionary.data.local.secure.DeviceInspection
 import com.galaxy.airviewdictionary.data.local.secure.IntegrityResponse
 import com.galaxy.airviewdictionary.data.local.secure.SecureAssessmentInfo
 import com.galaxy.airviewdictionary.data.local.secure.SecureRepository
-import com.galaxy.airviewdictionary.data.local.secure.TrialLimitInfo
 import com.galaxy.airviewdictionary.data.local.secure.VerdictAppLicensing
 import com.galaxy.airviewdictionary.data.local.secure.VerdictAppRecognition
 import com.galaxy.airviewdictionary.data.local.secure.VerdictDeviceRecognition
@@ -45,7 +43,6 @@ import com.galaxy.airviewdictionary.data.local.vision.model.VisionText
 import com.galaxy.airviewdictionary.data.local.vision.model.Word
 import com.galaxy.airviewdictionary.data.remote.ai.CorrectionKitType
 import com.galaxy.airviewdictionary.data.remote.ai.CorrectionRepository
-import com.galaxy.airviewdictionary.data.remote.billing.BillingRepository
 import com.galaxy.airviewdictionary.data.remote.firebase.AnalyticsRepository
 import com.galaxy.airviewdictionary.data.remote.firebase.RemoteConfigRepository
 import com.galaxy.airviewdictionary.data.remote.translation.Transaction
@@ -56,7 +53,6 @@ import com.galaxy.airviewdictionary.extensions.finishService
 import com.galaxy.airviewdictionary.extensions.gotoStore
 import com.galaxy.airviewdictionary.extensions.openGoogleApp
 import com.galaxy.airviewdictionary.extensions.toPx
-import com.galaxy.airviewdictionary.ui.screen.main.SettingsActivity
 import com.galaxy.airviewdictionary.ui.screen.overlay.dialog.DialogView
 import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.MenuBarView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.DismissRunningCommand
@@ -94,7 +90,6 @@ class TargetHandleViewModelFactory(
     private val applicationContext: Context,
     private val secureRepository: SecureRepository,
     private val remoteConfigRepository: RemoteConfigRepository,
-    private val billingRepository: BillingRepository,
     private val preferenceRepository: PreferenceRepository,
     private val captureRepository: CaptureRepository,
     private val visionRepository: VisionRepository,
@@ -109,7 +104,6 @@ class TargetHandleViewModelFactory(
                 applicationContext = applicationContext,
                 secureRepository = secureRepository,
                 remoteConfigRepository = remoteConfigRepository,
-                billingRepository = billingRepository,
                 preferenceRepository = preferenceRepository,
                 captureRepository = captureRepository,
                 visionRepository = visionRepository,
@@ -127,7 +121,6 @@ class TargetHandleViewModel(
     private val applicationContext: Context,
     private val secureRepository: SecureRepository,
     val remoteConfigRepository: RemoteConfigRepository,
-    val billingRepository: BillingRepository,
     val preferenceRepository: PreferenceRepository,
     val captureRepository: CaptureRepository,
     val visionRepository: VisionRepository,
@@ -511,6 +504,7 @@ class TargetHandleViewModel(
         get() = _dockingDelay
 
     private var ttsSpeechRate = 1.0f
+    private var ttsPitch = 1.0f
 
     private fun collectPreference() {
         viewModelScope.launch {
@@ -535,6 +529,13 @@ class TargetHandleViewModel(
             preferenceRepository.ttsSpeechRateFlow
                 .collect { ttsSpeechRate_ ->
                     ttsSpeechRate = ttsSpeechRate_
+                }
+        }
+
+        viewModelScope.launch {
+            preferenceRepository.ttsPitchFlow
+                .collect { ttsPitch_ ->
+                    ttsPitch = ttsPitch_
                 }
         }
     }
@@ -1086,7 +1087,7 @@ class TargetHandleViewModel(
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
     private val pointerPositionDetectedLanguageCodeFlow = pointerPositionedTranslationFlow
-        .map { it?.detectedLanguageCode }
+        .map { it?.targetLanguageCode }
         .distinctUntilChanged()
 
     private fun collectTranslationVoiceFlow() {
@@ -1100,151 +1101,15 @@ class TargetHandleViewModel(
                 .collect { (orderedVoiceNames, detectedLanguageCode) ->
                     Timber.tag(TAG).i("Ordered Voice Names: $orderedVoiceNames")
                     Timber.tag(TAG).i("Detected Language Code: $detectedLanguageCode")
-                    val matchingVoiceName = if (orderedVoiceNames.isEmpty()) {
-                        val availableVoices = ttsRepository.availableVoicesFlow.filterNotNull().first()
-                        availableVoices.map { voice -> voice.name }.firstOrNull { voiceName ->
-                            voiceName.startsWith(detectedLanguageCode)
-                        }
-                    } else {
-                        orderedVoiceNames.firstOrNull { voiceName ->
-                            voiceName.startsWith(detectedLanguageCode)
-                        }
-                    }
-                    Timber.tag(TAG).i("matchingVoiceName: $matchingVoiceName")
-                    matchingVoiceName?.let {
-                        ttsRepository.setVoice(matchingVoiceName)
-                    }
+                    ttsRepository.setLanguage(detectedLanguageCode, orderedVoiceNames)
                 }
         }
     }
 
-    fun playTTS(text: String) {
-        ttsRepository.playTTS(text, ttsSpeechRate)
+    fun playTTS(text: String, languageCode: String) {
+        ttsRepository.playTTS(text, ttsSpeechRate, ttsPitch, languageCode)
     }
 
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    //                                                                                            //
-    //                                           구매 유도                                         //
-    //                                                                                            //
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    fun increaseTrialCount(): Int {
-        return secureRepository.increaseTrialCount()
-    }
-
-    private fun collectPurchaseInducementInfo() {
-        /*
-            remote config 에서 TRIAL_TIME_LIMIT_MINUTE 값을 수신,
-            TrialLimitInfo 에 무료체험 시간제한 정보를 저장
-         */
-        viewModelScope.launch {
-            remoteConfigRepository.remoteConfigFlow
-                .collect { remoteConfig ->
-                    TrialLimitInfo.setTrialTimeLimitMinute(
-                        context = applicationContext,
-                        trialTimeLimitMinute = remoteConfig[RemoteConfigRepository.TRIAL_TIME_LIMIT_MINUTE]?.asLong()?.toInt() ?: 0
-                    )
-                    TrialLimitInfo.setFixedAreaViewCampaignPeriodMinute(
-                        context = applicationContext,
-                        fixedAreaViewCampaignPeriodMinute = remoteConfig[RemoteConfigRepository.FIXED_AREA_VIEW_CAMPAIGN_PERIOD_MINUTE]?.asLong()?.toInt() ?: 10
-                    )
-
-                    Timber.tag(TAG).d("==== remoteConfig ${TrialLimitInfo.trialRemainMinutes(applicationContext)} ")
-                    Timber.tag(TAG).d("==== remoteConfig ${TrialLimitInfo.toString(applicationContext)} ")
-                }
-        }
-
-        // 번역 카운트 통계
-        viewModelScope.launch {
-            combine(
-                pointerPositionedTranslationFlow
-                    .filterNotNull()
-                    .filter { translation -> translation.resultText != null }
-                    .distinctUntilChanged { old, new ->
-                        old.sourceText == new.sourceText
-                    },
-                billingRepository.purchaseStateFlow, // 구매 상태 flow
-            ) { _, purchaseState ->
-                var trialCount = false
-                if (purchaseState != Purchase.PurchaseState.PURCHASED) {
-                    val textDetectMode: TextDetectMode = preferenceRepository.textDetectModeFlow.first()
-                    val translationKitType: TranslationKitType = preferenceRepository.translationKitTypeFlow.first()
-                    Timber.tag(TAG).d("==== textDetectMode $textDetectMode translationKitType $translationKitType ")
-                    if (textDetectMode != TextDetectMode.WORD || translationKitType != TranslationKitType.GOOGLE) {
-                        trialCount = true
-                    }
-                }
-                trialCount
-            }.collect { trialCount: Boolean ->
-                if (trialCount) {
-                    // 비구매자 번역 카운트
-                    val trialCount = increaseTrialCount()
-                    // 비구매자 번역 카운트 통계
-                    if (
-                        trialCount == 100
-                        || trialCount == 200
-                        || trialCount == 300
-                        || trialCount == 500
-                    ) {
-                        val hoursTaken = TrialLimitInfo.trialElapsedHours(applicationContext)
-                        analyticsRepository.hoursTakenReport(trialCount, hoursTaken)
-                    } else if (trialCount % 1000 == 0) {
-                        val daysTaken = TrialLimitInfo.trialElapsedDays(applicationContext)
-                        analyticsRepository.daysTakenReport(trialCount, daysTaken)
-                    }
-                }
-            }
-        }
-
-        /**
-         * 구매유도:
-         *      번역 수행시 구매 상태 정보를 참조하여 구매유도가 필요한지의 여부를 flow 한다.
-         *      구매상태 에서는 구매유도 하지 않음
-         *      SettingsActivity 화면 상태에서는 구매유도 하지 않음
-         *      TextDetectMode.WORD && TranslationKitType.GOOGLE 상태 에서는 구매유도 하지 않음
-         *      그 외 TrialLimitInfo.isTrialAvailable 값이 false 이면 구매유도
-         */
-        viewModelScope.launch {
-            combine(
-                pointerPositionedTranslationFlow // 번역 수행 flow
-                    .filterNotNull()
-                    .filter { translation -> translation.resultText != null }
-                    .distinctUntilChanged { old, new ->
-                        old.sourceText == new.sourceText
-                    },
-                billingRepository.purchaseStateFlow, // 구매 상태 flow
-            ) { _, purchaseState ->
-                var purchaseInducement = false
-                Timber.tag(TAG).d("Admob ================ purchaseState: $purchaseState ${SettingsActivity.liveStateFlow.value}")
-                if (purchaseState != Purchase.PurchaseState.PURCHASED && !SettingsActivity.liveStateFlow.value) {
-                    val textDetectMode: TextDetectMode = preferenceRepository.textDetectModeFlow.first()
-                    val translationKitType: TranslationKitType = preferenceRepository.translationKitTypeFlow.first()
-                    if (textDetectMode != TextDetectMode.WORD || translationKitType != TranslationKitType.GOOGLE) {
-                        Timber.tag(TAG).i("TrialLimitInfo ${TrialLimitInfo.toString(applicationContext)}")
-                        if (!TrialLimitInfo.isTrialAvailable(applicationContext)) {
-                            purchaseInducement = true
-                        }
-                    }
-                }
-                purchaseInducement
-            }.collect { purchaseInducement: Boolean ->
-                Timber.tag(TAG).d("Admob ================ purchaseInducement : ${purchaseInducement}")
-                if (purchaseInducement) {
-                    delay(1000)
-                    inducePurchase()
-                }
-            }
-        }
-    }
-
-    fun inducePurchase() {
-        // 구매안내 페이지 이동
-        SettingsActivity.purchaseInduce(applicationContext)
-        // TextDetectMode 와 TranslationKitType 를 기본값으로 전환
-//        updateTextDetectMode(TextDetectMode.WORD)
-//        updateTranslationKitType(TranslationKitType.GOOGLE)
-    }
 
     init {
         Timber.tag(TAG).i("#### init ####")
@@ -1252,10 +1117,8 @@ class TargetHandleViewModel(
         captureRepository.acquire()
         translationRepository.acquire()
         ttsRepository.acquire()
-        billingRepository.acquire()
         collectSecureStateFlow()
         collectServiceOperationInfoFlow()
-        collectPurchaseInducementInfo()
         collectPreference()
         collectTargetHandleMotionEvent()
         collectVisionTextForTranslationView()
@@ -1267,7 +1130,6 @@ class TargetHandleViewModel(
         captureRepository.release()
         translationRepository.release()
         ttsRepository.release()
-        billingRepository.release()
         super.onCleared()
     }
 }

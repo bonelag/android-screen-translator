@@ -498,8 +498,12 @@ open class TranslationView : OverlayView() {
             initialValue = false
         )
 
-        if (automaticTranslationPlayback) {
-            targetHandleViewModel.playTTS(translation.sourceText!!)
+        LaunchedEffect(automaticTranslationPlayback, translation.resultText, translation.targetLanguageCode) {
+            val resultText = translation.resultText
+            val targetLanguageCode = translation.targetLanguageCode
+            if (automaticTranslationPlayback && !resultText.isNullOrBlank() && !targetLanguageCode.isNullOrBlank()) {
+                targetHandleViewModel.playTTS(resultText, targetLanguageCode)
+            }
         }
 
         Box(
@@ -678,7 +682,7 @@ open class TranslationView : OverlayView() {
                     IconButton(
                         onClick = {
                             Timber.tag("TranslationView").d("onClick 스피커 아이콘")
-                            targetHandleViewModel.playTTS(sourceText!!)
+                            targetHandleViewModel.playTTS(translation.resultText ?: "", translation.targetLanguageCode ?: "en")
                         },
                         modifier = Modifier
                             .size(bottomMenuHeight)

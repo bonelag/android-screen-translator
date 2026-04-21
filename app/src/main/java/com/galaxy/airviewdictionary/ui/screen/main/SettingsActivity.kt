@@ -2,6 +2,7 @@ package com.galaxy.airviewdictionary.ui.screen.main
 
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
@@ -13,16 +14,11 @@ import android.os.StrictMode
 import android.os.StrictMode.ThreadPolicy
 import android.view.WindowInsets
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
@@ -31,6 +27,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +48,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.FiberNew
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -57,12 +56,15 @@ import androidx.compose.material.icons.filled.VoiceChat
 import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Movie
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
@@ -71,6 +73,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -113,21 +116,19 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import com.android.billingclient.api.Purchase
 import com.galaxy.airviewdictionary.BuildConfig
 import com.galaxy.airviewdictionary.R
 import com.galaxy.airviewdictionary.data.local.capture.CaptureRepository
 import com.galaxy.airviewdictionary.data.local.screen.ScreenInfoHolder
-import com.galaxy.airviewdictionary.data.local.secure.TrialLimitInfo
+import com.galaxy.airviewdictionary.data.local.tts.TtsEngineInfo
+import com.galaxy.airviewdictionary.data.local.tts.TtsLanguageInfo
 import com.galaxy.airviewdictionary.data.local.vision.TextDetectMode
 import com.galaxy.airviewdictionary.data.remote.ai.CorrectionKitType
-import com.galaxy.airviewdictionary.data.remote.firebase.RemoteConfigRepository
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationKitType
 import com.galaxy.airviewdictionary.extensions.finishService
 import com.galaxy.airviewdictionary.extensions.gotoStore
 import com.galaxy.airviewdictionary.extensions.toPx
 import com.galaxy.airviewdictionary.extensions.vibrate
-import com.galaxy.airviewdictionary.ui.common.AutoRefreshEveryMinute
 import com.galaxy.airviewdictionary.ui.common.fontDimensionResource
 import com.galaxy.airviewdictionary.ui.screen.AVDActivity
 import com.galaxy.airviewdictionary.ui.screen.intro.SplashActivity
@@ -143,25 +144,9 @@ import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleV
 import com.galaxy.airviewdictionary.ui.screen.overlay.voicelist.VoiceListView
 import com.galaxy.airviewdictionary.ui.screen.permissions.ScreenCapturePermissionRequesterActivity
 import com.galaxy.airviewdictionary.ui.theme.ScreenTranslatorTheme
-import com.google.android.gms.ads.AdError
-import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.FullScreenContentCallback
-import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.MobileAds
-import com.google.android.gms.ads.OnUserEarnedRewardListener
-import com.google.android.gms.ads.RequestConfiguration
-import com.google.android.gms.ads.rewarded.RewardedAd
-import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
-import com.google.android.play.core.review.ReviewException
-import com.google.android.play.core.review.ReviewManager
-import com.google.android.play.core.review.ReviewManagerFactory
-import com.google.android.play.core.review.testing.FakeReviewManager
 import com.google.firebase.Firebase
 import com.google.firebase.analytics.analytics
-import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -170,7 +155,6 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.ceil
 import kotlin.math.round
 import kotlin.math.roundToInt
@@ -180,36 +164,17 @@ import kotlin.math.roundToInt
 class SettingsActivity : AVDActivity() {
 
     companion object {
-
-        const val EXTRA_PURCHASE = "EXTRA_PURCHASE"
-
-        const val EXTRA_PURCHASE_INDUCEMENT = "EXTRA_PURCHASE_INDUCEMENT"
-
         fun start(context: Context) {
             val intent = Intent(context, SettingsActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         }
 
-        fun purchaseInduce(context: Context) {
-            val intent = Intent(context, SettingsActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            intent.putExtra(EXTRA_PURCHASE_INDUCEMENT, true)
-            context.startActivity(intent)
-        }
-
-        fun purchase(context: Context) {
-            val intent = Intent(context, SettingsActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            intent.putExtra(EXTRA_PURCHASE, true)
-            context.startActivity(intent)
-        }
-
         val liveStateFlow = MutableStateFlow(false)
 
-        val menuBarViewSettlePositionFlow = MutableStateFlow<Point?>(null)
+        val screenTranslatorRunningFlow = MutableStateFlow(false)
 
-        val premiumViewVisibleStateFlow = MutableStateFlow(false)
+        val menuBarViewSettlePositionFlow = MutableStateFlow<Point?>(null)
     }
 
     private val viewModel: SettingsViewModel by viewModels()
@@ -218,21 +183,56 @@ class SettingsActivity : AVDActivity() {
 
     private val settingStringFlow = MutableStateFlow("")
 
+    private val screenCapturePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        Timber.tag(TAG).d("screenCapturePermissionLauncher resultCode=${result.resultCode} token=${CaptureRepository.mediaProjectionToken}")
+        if (result.resultCode == Activity.RESULT_OK && CaptureRepository.mediaProjectionToken != null) {
+            lifecycleScope.launch {
+                startScreenTranslator()
+            }
+        } else {
+            screenTranslatorRunningFlow.value = false
+        }
+    }
+
 //    private val snackMessageFlow = MutableStateFlow("")
 
-    private val isMobileAdsInitializeCalled = AtomicBoolean(false)
-    private lateinit var googleMobileAdsConsentManager: GoogleMobileAdsConsentManager
-    private var isRewardedAdLoading = false
-    private var rewardedAd: RewardedAd? = null
+    private suspend fun startScreenTranslator() {
+        if (!MenuBarView.INSTANCE.isRunning.get()) {
+            MenuBarView.INSTANCE.cast(applicationContext)
+        }
+        if (!TargetHandleView.INSTANCE.isRunning.get()) {
+            TargetHandleView.INSTANCE.cast(applicationContext)
+        }
+        screenTranslatorRunningFlow.value = true
+    }
 
-    @OptIn(ExperimentalSharedTransitionApi::class)
+    private fun requestScreenCaptureAndStart() {
+        if (CaptureRepository.mediaProjectionToken != null) {
+            lifecycleScope.launch {
+                startScreenTranslator()
+            }
+            return
+        }
+
+        val intent = Intent(this, ScreenCapturePermissionRequesterActivity::class.java)
+        screenCapturePermissionLauncher.launch(intent)
+    }
+
+    private fun stopScreenTranslator() {
+        closeTranslation()
+        MenuBarView.INSTANCE.clear()
+        TargetHandleView.INSTANCE.clear()
+        applicationContext.finishService()
+        screenTranslatorRunningFlow.value = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         ScreenInfoHolder.collectAndStoreScreenInfo(this)
-
-        initGoogleMobileAdsConsentManager()
 
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             val policy = ThreadPolicy.Builder().permitAll().build()
@@ -251,37 +251,13 @@ class SettingsActivity : AVDActivity() {
             WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = !isDarkMode
         }
 
-        val purchaseInducement = intent.getBooleanExtra(EXTRA_PURCHASE_INDUCEMENT, false)
-        premiumViewVisibleStateFlow.value = purchaseInducement
-
         setContent {
             ScreenTranslatorTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val lifecycleOwner = LocalLifecycleOwner.current
-
-                    val premiumViewVisible by premiumViewVisibleStateFlow.collectAsStateWithLifecycle(
-                        lifecycle = lifecycleOwner.lifecycle,
-                        initialValue = false
-                    )
-
                     val isDarkMode = isSystemInDarkTheme()
                     val backgroundColor = if (isDarkMode) Color(0xFF010102) else Color(0xFFf2f1f4)
 
                     val snackBarHostState = remember { SnackbarHostState() }
-
-                    LaunchedEffect(viewModel.billingRepository.purchaseStateMessageFlow) {
-                        viewModel.billingRepository.purchaseStateMessageFlow.collect { message ->
-                            if (message.isNotEmpty()) {
-                                lifecycleScope.launch {
-                                    snackBarHostState.showSnackbar(
-                                        message = message,
-                                        duration = SnackbarDuration.Long,
-//                                        actionLabel = "snackbar"
-                                    )
-                                }
-                            }
-                        }
-                    }
 
 //                    LaunchedEffect(snackMessageFlow) {
 //                        snackMessageFlow.collect { message ->
@@ -310,31 +286,9 @@ class SettingsActivity : AVDActivity() {
                                 .background(backgroundColor)
                                 .padding(paddingValues)
                         ) {
-                            SharedTransitionLayout {
-                                AnimatedContent(
-                                    targetState = premiumViewVisible,
-                                    label = "menu_premium_transition",
-                                ) { showPremium ->
-                                    if (showPremium) {
-                                        PremiumView(
-                                            onBack = {
-                                                premiumViewVisibleStateFlow.value = false
-                                            },
-                                            animatedVisibilityScope = this@AnimatedContent,
-                                            sharedTransitionScope = this@SharedTransitionLayout
-                                        )
-                                    } else {
-                                        Settings(
-                                            onShowPremium = {
-                                                premiumViewVisibleStateFlow.value = true
-                                            },
-                                            animatedVisibilityScope = this@AnimatedContent,
-                                            sharedTransitionScope = this@SharedTransitionLayout,
-                                            paddingValues = paddingValues
-                                        )
-                                    }
-                                }
-                            }
+                            Settings(
+                                paddingValues = paddingValues
+                            )
                         }
                     }
 
@@ -361,8 +315,6 @@ class SettingsActivity : AVDActivity() {
                 }
             }
         })
-
-        appReview()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -378,11 +330,6 @@ class SettingsActivity : AVDActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        premiumViewVisibleStateFlow.value = intent?.getBooleanExtra(EXTRA_PURCHASE_INDUCEMENT, false) == true
-
-        if (intent?.getBooleanExtra(EXTRA_PURCHASE, false) == true) {
-            viewModel.launchBillingFlow(this)
-        }
     }
 
     override fun onResume() {
@@ -401,28 +348,8 @@ class SettingsActivity : AVDActivity() {
         }
 
         liveStateFlow.value = true
-
-        lifecycleScope.launch {
-            if (!MenuBarView.INSTANCE.isRunning.get()) {
-                MenuBarView.INSTANCE.cast(applicationContext)
-            }
-            if (!TargetHandleView.INSTANCE.isRunning.get()) {
-                TargetHandleView.INSTANCE.cast(applicationContext)
-//                snackMessageFlow.value = getString(R.string.snack_message_start_foreground_service)
-            }
-
-            delay(1000)
-            if (isActive) {
-                if (CaptureRepository.mediaProjectionToken == null) {
-                    // 화면 캡처 권한을 요청
-                    val intent = Intent(this@SettingsActivity, ScreenCapturePermissionRequesterActivity::class.java)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    startActivity(intent)
-                }
-            }
-        }
-
-        loadRewardedAd()
+        screenTranslatorRunningFlow.value =
+            MenuBarView.INSTANCE.isRunning.get() || TargetHandleView.INSTANCE.isRunning.get()
     }
 
     override fun onPause() {
@@ -432,7 +359,6 @@ class SettingsActivity : AVDActivity() {
         VoiceListView.INSTANCE.clear()
         HelpTextDetectModeView.INSTANCE.clear()
         HelpTranslationKitView.INSTANCE.clear()
-        premiumViewVisibleStateFlow.value = false
         liveStateFlow.value = false
         super.onPause()
     }
@@ -457,183 +383,12 @@ class SettingsActivity : AVDActivity() {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
     //                                                                                            //
-    //                                            Admob                                           //
-    //                                                                                            //
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-
-    private fun initGoogleMobileAdsConsentManager() {
-        Timber.tag(TAG).i("Admob initGoogleMobileAdsConsentManager Google Mobile Ads SDK Version: ${MobileAds.getVersion()}")
-        googleMobileAdsConsentManager = GoogleMobileAdsConsentManager.getInstance(this)
-        googleMobileAdsConsentManager.gatherConsent(this) { error ->
-            if (error != null) {
-                // Consent not obtained in current session.
-                Timber.tag(TAG).d("${error.errorCode}: ${error.message}")
-            }
-
-            if (googleMobileAdsConsentManager.canRequestAds) {
-                initializeMobileAdsSdk()
-            }
-
-            if (googleMobileAdsConsentManager.isPrivacyOptionsRequired) {
-                // Regenerate the options menu to include a privacy setting.
-                invalidateOptionsMenu()
-            }
-        }
-
-        // This sample attempts to load ads using consent obtained in the previous session.
-        if (googleMobileAdsConsentManager.canRequestAds) {
-            initializeMobileAdsSdk()
-        }
-    }
-
-    private fun initializeMobileAdsSdk() {
-        Timber.tag(TAG).i("Admob initializeMobileAdsSdk isMobileAdsInitializeCalled: ${isMobileAdsInitializeCalled.get()}")
-        if (isMobileAdsInitializeCalled.getAndSet(true)) {
-            return
-        }
-
-        // Set your test devices.
-        if (BuildConfig.DEBUG) {
-            MobileAds.setRequestConfiguration(
-                RequestConfiguration.Builder().setTestDeviceIds(listOf("BA6732E32C6CA0D01FB929ECC2FDA19F")).build()
-            )
-        }
-
-        CoroutineScope(Dispatchers.IO).launch {
-            // Initialize the Google Mobile Ads SDK on a background thread.
-            MobileAds.initialize(this@SettingsActivity) {}
-            runOnUiThread {
-                // Load an ad on the main thread.
-                loadRewardedAd()
-            }
-        }
-    }
-
-    private fun loadRewardedAd() {
-        Timber.tag(TAG).i("Admob loadRewardedAd googleMobileAdsConsentManager.canRequestAds: ${googleMobileAdsConsentManager.canRequestAds}")
-        if (!googleMobileAdsConsentManager.canRequestAds) {
-            return
-        }
-
-        val adUnitId =
-            if (BuildConfig.DEBUG) {
-                "" // TODO: Set your AdMob test ad unit ID
-            } else {
-                FirebaseRemoteConfig.getInstance().getString(RemoteConfigRepository.AD_UNIT_ID)
-            }
-        Timber.tag(TAG).i("rewardedAd $rewardedAd isRewardedAdLoading $isRewardedAdLoading adUnitId $adUnitId")
-        if (rewardedAd == null) {
-            if (!isRewardedAdLoading) {
-                isRewardedAdLoading = true
-                var adRequest = AdRequest.Builder().build()
-
-                RewardedAd.load(
-                    this,
-                    adUnitId,
-                    adRequest,
-                    object : RewardedAdLoadCallback() {
-                        override fun onAdFailedToLoad(adError: LoadAdError) {
-                            Timber.tag(TAG).d(adError.message)
-                            rewardedAd = null
-                            isRewardedAdLoading = false
-                        }
-
-                        override fun onAdLoaded(ad: RewardedAd) {
-                            Timber.tag(TAG).d("Ad was loaded.")
-                            rewardedAd = ad
-                            isRewardedAdLoading = false
-                            loadRewardedAd()
-                        }
-                    },
-                )
-            }
-        } else {
-            val purchaseInducement = intent.getBooleanExtra(EXTRA_PURCHASE_INDUCEMENT, false)
-            Timber.tag(TAG).d("Admob purchaseInducement $purchaseInducement")
-            if (purchaseInducement) {
-                CoroutineScope(Dispatchers.Main).launch {
-                    DialogView.INSTANCE.cast(
-                        applicationContext = applicationContext,
-                        icon = Icons.Outlined.Movie,
-                        dialogTitle = getString(R.string.message_free_trial_ends),
-                        dialogText = getString(R.string.message_free_trial_ends_detail),
-                        onConfirm = {
-                            intent.removeExtra(EXTRA_PURCHASE_INDUCEMENT)
-                            showRewardedVideo()
-                        },
-                        onDismiss = {
-                            DialogView.INSTANCE.clear()
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-    private fun showRewardedVideo() {
-        Timber.tag(TAG).d("Admob showRewardedVideo rewardedAd $rewardedAd")
-        rewardedAd?.fullScreenContentCallback =
-            object : FullScreenContentCallback() {
-                override fun onAdDismissedFullScreenContent() {
-                    Timber.tag(TAG).d("Ad was dismissed.")
-                    // Don't forget to set the ad reference to null so you don't show the ad a second time.
-                    rewardedAd = null
-                    if (googleMobileAdsConsentManager.canRequestAds) {
-                        loadRewardedAd()
-                    }
-                }
-
-                override fun onAdFailedToShowFullScreenContent(adError: AdError) {
-                    Timber.tag(TAG).d("Ad failed to show.")
-                    // Don't forget to set the ad reference to null so you don't show the ad a second time.
-                    rewardedAd = null
-                }
-
-                override fun onAdShowedFullScreenContent() {
-                    Timber.tag(TAG).d("Ad showed fullscreen content.")
-                    // Called when ad is dismissed.
-                }
-            }
-
-        rewardedAd?.show(
-            this,
-            OnUserEarnedRewardListener { rewardItem ->
-                // Handle the reward.
-                val rewardAmount = rewardItem.amount
-                val rewardType = rewardItem.type
-                TrialLimitInfo.addTrialTime(applicationContext, rewardItem.amount)
-                Timber.tag(TAG).i("User earned the reward. $rewardAmount $rewardType")
-
-                val title = getString(R.string.message_ad_reward, rewardItem.amount)
-                val message = getString(R.string.message_ad_reward_detail, rewardItem.amount)
-
-                CoroutineScope(Dispatchers.Main).launch {
-                    DialogView.INSTANCE.cast(
-                        applicationContext = applicationContext,
-                        icon = Icons.Outlined.CardGiftcard,
-                        dialogTitle = title,
-                        dialogText = message,
-                        onConfirm = {
-                            finish()
-                        }
-                    )
-                }
-            },
-        )
-    }
-
-    ////////////////////////////////////////////////////////////////////////////////////////////////
-    //                                                                                            //
     //                                          Composable                                        //
     //                                                                                            //
     ////////////////////////////////////////////////////////////////////////////////////////////////
     @SuppressLint("LocalContextConfigurationRead")
-    @OptIn(ExperimentalSharedTransitionApi::class)
     @Composable
     fun Settings(
-        onShowPremium: () -> Unit,
-        sharedTransitionScope: SharedTransitionScope,
-        animatedVisibilityScope: AnimatedVisibilityScope,
         paddingValues: PaddingValues,
     ) {
         val context = LocalContext.current
@@ -753,8 +508,16 @@ class SettingsActivity : AVDActivity() {
 
         // TTS Speech rate
         val ttsSpeechRateTextOffset = remember { mutableStateOf(Point(0, 0)) }
-        val ttsSpeechRateIconOffset = remember { mutableStateOf(Point(0, 0)) }
+        val ttsSpeechRateSubtextOffset = remember { mutableStateOf(Point(0, 0)) }
         val ttsSpeechRate by viewModel.preferenceRepository.ttsSpeechRateFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = 1.0f
+        )
+
+        // TTS Pitch
+        val ttsPitchTextOffset = remember { mutableStateOf(Point(0, 0)) }
+        val ttsPitchSubtextOffset = remember { mutableStateOf(Point(0, 0)) }
+        val ttsPitch by viewModel.preferenceRepository.ttsPitchFlow.collectAsStateWithLifecycle(
             lifecycle = lifecycleOwner.lifecycle,
             initialValue = 1.0f
         )
@@ -765,11 +528,129 @@ class SettingsActivity : AVDActivity() {
             initialValue = emptyList()
         )
 
-        // TTS Voice
-        val ttsCurrentVoice by viewModel.ttsRepository.currentVoiceFlow.collectAsStateWithLifecycle(
+        val ttsAvailableLanguages by viewModel.ttsRepository.availableLanguagesFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = emptyList()
+        )
+
+        val ttsAvailableEngines by viewModel.ttsRepository.availableEnginesFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = emptyList()
+        )
+
+        val ttsSelectedLanguageTag by viewModel.ttsRepository.selectedLanguageTagFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = ""
+        )
+
+        val ttsSelectedVoice by viewModel.ttsRepository.selectedVoiceFlow.collectAsStateWithLifecycle(
             lifecycle = lifecycleOwner.lifecycle,
             initialValue = null
         )
+
+        val savedTtsVoiceName by viewModel.preferenceRepository.ttsVoiceNameFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = ""
+        )
+
+        val ttsCurrentEnginePackage by viewModel.ttsRepository.currentEnginePackageFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = ""
+        )
+
+        val ttsSelectedLanguage = ttsAvailableLanguages.firstOrNull { language ->
+            language.languageTag.equals(ttsSelectedLanguageTag, ignoreCase = true)
+        }
+
+        val ttsVoicesForSelectedLanguage = remember(ttsAvailableVoices, ttsSelectedLanguageTag) {
+            ttsAvailableVoices.filter { voice ->
+                val languageTag = voice.locale.toLanguageTag()
+                languageTag.equals(ttsSelectedLanguageTag, ignoreCase = true) ||
+                    (
+                        ttsSelectedLanguageTag.isNotBlank() &&
+                            voice.locale.language.equals(
+                                java.util.Locale.forLanguageTag(ttsSelectedLanguageTag).language,
+                                ignoreCase = true
+                            )
+                        )
+            }
+        }
+
+        var showTtsEngineDialog by remember { mutableStateOf(false) }
+        var showTtsLanguageDialog by remember { mutableStateOf(false) }
+        var showTtsVoiceDialog by remember { mutableStateOf(false) }
+
+        val screenTranslatorRunning by screenTranslatorRunningFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = false
+        )
+
+        LaunchedEffect(Unit) {
+            viewModel.ttsRepository.primeEngineState(delayMs = 250L)
+        }
+
+        if (showTtsEngineDialog) {
+            TtsSelectionDialog(
+                title = getString(R.string.settings_menu_tts_engine),
+                options = ttsAvailableEngines,
+                optionKey = { engine -> engine.packageName },
+                optionLabel = { engine -> engine.label },
+                optionSupportingText = { engine ->
+                    "${engine.languageCount} languages • ${engine.voiceCount} voices"
+                },
+                isSelected = { engine -> engine.packageName == ttsCurrentEnginePackage },
+                onSelect = { engine ->
+                    viewModel.ttsRepository.setEnginePackage(engine.packageName)
+                },
+                onDismiss = { showTtsEngineDialog = false }
+            )
+        }
+
+        if (showTtsLanguageDialog) {
+            TtsSelectionDialog(
+                title = getString(R.string.settings_menu_tts_language),
+                options = ttsAvailableLanguages,
+                optionKey = { language -> language.languageTag },
+                optionLabel = { language -> language.displayName },
+                optionSupportingText = { language ->
+                    "${language.languageTag} • ${language.voiceCount} voices"
+                },
+                isSelected = { language ->
+                    language.languageTag.equals(ttsSelectedLanguageTag, ignoreCase = true)
+                },
+                onSelect = { language ->
+                    viewModel.ttsRepository.selectLanguage(language.languageTag)
+                },
+                searchEnabled = true,
+                searchPlaceholder = getString(android.R.string.search_go),
+                onDismiss = { showTtsLanguageDialog = false }
+            )
+        }
+
+        if (showTtsVoiceDialog) {
+            TtsSelectionDialog(
+                title = getString(R.string.settings_menu_tts_voices),
+                options = ttsVoicesForSelectedLanguage,
+                optionKey = { voice -> voice.name },
+                optionLabel = { voice -> voice.name },
+                optionSupportingText = { voice ->
+                    voice.locale.getDisplayName()
+                },
+                isSelected = { voice ->
+                    ttsSelectedVoice?.name.equals(voice.name, ignoreCase = true)
+                },
+                onSelect = { voice ->
+                    viewModel.ttsRepository.selectVoice(voice.name)
+                },
+                onOptionAction = { voice ->
+                    viewModel.playTtsVoicePreview(voice)
+                },
+                optionActionContentDescription = { voice ->
+                    "Preview ${voice.name}"
+                },
+                onDismiss = { showTtsVoiceDialog = false }
+            )
+        }
 
         // Text detect mode
         val textDetectMode by viewModel.preferenceRepository.textDetectModeFlow.collectAsStateWithLifecycle(
@@ -810,35 +691,28 @@ class SettingsActivity : AVDActivity() {
             return "${round(second / 1000.0 * 10) / 10} sec"
         }
 
-        val onPremiumTreeTrialTextResource = remember { mutableIntStateOf(R.string.settings_menu_on_premium_free_trial) }
-
-        val remoteConfig by viewModel.remoteConfigRepository.remoteConfigFlow.collectAsStateWithLifecycle(
-            lifecycle = lifecycleOwner.lifecycle,
-            initialValue = 0
-        )
-        LaunchedEffect(remoteConfig) {
-            Timber.tag(TAG).d("trialRemainMinutes ${TrialLimitInfo.trialRemainMinutes(applicationContext)} ")
+        fun snapToStep(
+            value: Float,
+            step: Float,
+            min: Float,
+            max: Float,
+            base: Float = 0f,
+        ): Float {
+            val snapped = (round(((value - base) / step).toDouble()) * step + base).toFloat()
+            return snapped.coerceIn(min, max)
         }
 
-        val purchaseState: Int by viewModel.billingRepository.purchaseStateFlow.collectAsStateWithLifecycle(
-            lifecycle = lifecycleOwner.lifecycle,
-            initialValue = Purchase.PurchaseState.UNSPECIFIED_STATE
-        )
-
-        LaunchedEffect(purchaseState) {
-            if (purchaseState == Purchase.PurchaseState.PURCHASED) {
-                onPremiumTreeTrialTextResource.intValue = R.string.settings_menu_your_premium_benefits
-            } else if (purchaseState == Purchase.PurchaseState.PENDING) {
-                onPremiumTreeTrialTextResource.intValue = R.string.settings_menu_your_premium_benefits_peding
-            } else {
-                onPremiumTreeTrialTextResource.intValue = R.string.settings_menu_on_premium_free_trial
-            }
+        fun formatSingleDecimal(value: Float): String {
+            return BigDecimal(value.toDouble()).setScale(1, RoundingMode.HALF_UP).toString()
         }
 
-        AutoRefreshEveryMinute {
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
+        fun formatTtsRateValue(value: Float): String {
+            return "${formatSingleDecimal(value)}x"
+        }
+
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
                 // ActionBar
                 Row(
                     modifier = Modifier
@@ -895,28 +769,25 @@ class SettingsActivity : AVDActivity() {
                                 replyTransparency = (replyTransparency * 100).roundToInt().toString(),
                                 correctionKit = if (useCorrectionKit) correctionKit.name else "none",
                                 autoTTS = automaticTranslationPlayback.toString(),
-                                TTSVoice = ttsCurrentVoice?.name ?: "unknown",
+                                TTSVoice = ttsSelectedVoice?.name ?: "unknown",
                                 TTSRate = BigDecimal(ttsSpeechRate.toDouble()).setScale(1, RoundingMode.HALF_UP).toString(),
                             )
 
-                            coroutineScope.launch {
-                                Firebase.analytics.setAnalyticsCollectionEnabled(false)
-                                delay(200L)
-                                finish()
-//                            moveTaskToBack(true)
-                                delay(200L)
-                                applicationContext.finishService()
+                            if (screenTranslatorRunning) {
+                                stopScreenTranslator()
+                            } else {
+                                requestScreenCaptureAndStart()
                             }
                         },
                         modifier = Modifier.align(Alignment.CenterVertically)
                     ) {
                         Icon(
                             imageVector = Icons.Default.PowerSettingsNew,
-                            contentDescription = "Exit App",
+                            contentDescription = if (screenTranslatorRunning) "Stop translation" else "Start translation",
                             modifier = Modifier
                                 .size(21.dp)
                                 .alpha(0.75f),
-                            tint = contentColor
+                            tint = if (screenTranslatorRunning) Color(0xFF4CAF50) else contentColor
                         )
                     }
                 }
@@ -1126,7 +997,6 @@ class SettingsActivity : AVDActivity() {
                                                 SliderDialogView.INSTANCE.clear()
                                             },
                                         )
-                                        MenuBarView.INSTANCE.cast(applicationContext, true)
                                     }
                                 }
                             ) {
@@ -1545,99 +1415,139 @@ class SettingsActivity : AVDActivity() {
                                 }
                             )
 
-                            if (ttsCurrentVoice != null) {
-                                MenuCategory(
-                                    icon = Icons.Default.VoiceChat,
-                                    categoryName = getString(R.string.settings_menu_cat_tts),
-                                    isRtl = isRtl,
-                                )
+                            MenuCategory(
+                                icon = Icons.Default.VoiceChat,
+                                categoryName = getString(R.string.settings_menu_cat_tts),
+                                isRtl = isRtl,
+                            )
 
-                                if (ttsAvailableVoices.isNotEmpty()) {
-                                    MenuTextItem(
-                                        menuItemPosition = MenuItemPosition.Top,
-                                        text = getString(R.string.settings_menu_tts_voices),
-                                        paddingValues = paddingValues,
-                                        subText = ttsCurrentVoice?.name,
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                VoiceListView.INSTANCE.cast(applicationContext)
-                                            }
-                                        }
-                                    )
-                                }
-
-                                MenuItem(
-                                    menuItemPosition = if (ttsAvailableVoices.isEmpty()) MenuItemPosition.Single else MenuItemPosition.Bottom,
-                                    onClick = {
-                                        coroutineScope.launch {
-                                            settingFloatFlow.value = ttsSpeechRate
-                                            SliderDialogView.INSTANCE.cast(
-                                                applicationContext = applicationContext,
-                                                initialValue = ttsSpeechRate,
-                                                valueRange = 0.5f..2.0f,
-                                                steps = 6,
-                                                onValueChange = { value ->
-                                                    viewModel.updateTtsSpeechRate(value)
-                                                    settingFloatFlow.value = value
-                                                },
-                                                menuText = Pair(getString(R.string.settings_menu_tts_rate), ttsSpeechRateTextOffset.value),
-                                                speechRateText = Pair(settingFloatFlow, ttsSpeechRateIconOffset.value),
-                                                onDismissRequest = {
-                                                    SliderDialogView.INSTANCE.clear()
-                                                },
-                                            )
-                                        }
+                            MenuTextItem(
+                                menuItemPosition = MenuItemPosition.Top,
+                                text = getString(R.string.settings_menu_tts_engine),
+                                paddingValues = paddingValues,
+                                subText = ttsAvailableEngines.firstOrNull { it.packageName == ttsCurrentEnginePackage }?.label
+                                    ?: ttsCurrentEnginePackage.takeIf { it.isNotBlank() }
+                                    ?: "Loading...",
+                                onClick = {
+                                    if (ttsAvailableEngines.isNotEmpty()) {
+                                        showTtsEngineDialog = true
+                                    } else {
+                                        viewModel.ttsRepository.refreshAvailableEngines()
                                     }
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(min = 50.dp)
-                                            .padding(end = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        MenuText(
-                                            text = getString(R.string.settings_menu_tts_rate),
-                                            onTextPositioned = { offset ->
-                                                ttsSpeechRateTextOffset.value = Point(offset.x - startPadding, offset.y)
+                                }
+                            )
+
+                            MenuTextItem(
+                                menuItemPosition = MenuItemPosition.Middle,
+                                text = getString(R.string.settings_menu_tts_language),
+                                paddingValues = paddingValues,
+                                subText = ttsSelectedLanguage?.displayName
+                                    ?: ttsSelectedLanguageTag.takeIf { it.isNotBlank() }
+                                    ?: "Loading...",
+                                onClick = {
+                                    if (ttsAvailableLanguages.isNotEmpty()) {
+                                        showTtsLanguageDialog = true
+                                    }
+                                }
+                            )
+
+                            MenuTextItem(
+                                menuItemPosition = MenuItemPosition.Middle,
+                                text = getString(R.string.settings_menu_tts_voices),
+                                paddingValues = paddingValues,
+                                subText = ttsSelectedVoice?.name
+                                    ?: savedTtsVoiceName.takeIf { it.isNotBlank() }
+                                    ?: "Loading...",
+                                onClick = {
+                                    if (ttsVoicesForSelectedLanguage.isNotEmpty()) {
+                                        showTtsVoiceDialog = true
+                                    }
+                                }
+                            )
+
+                            MenuTextItem(
+                                menuItemPosition = MenuItemPosition.Middle,
+                                text = getString(R.string.settings_menu_tts_rate),
+                                paddingValues = paddingValues,
+                                onTextPositioned = { offset ->
+                                    ttsSpeechRateTextOffset.value = Point(offset.x - startPadding, offset.y)
+                                },
+                                subText = formatTtsRateValue(ttsSpeechRate),
+                                onSubtextPositioned = { offset ->
+                                    ttsSpeechRateSubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                                },
+                                onClick = {
+                                    coroutineScope.launch {
+                                        settingFloatFlow.value = ttsSpeechRate
+                                        settingStringFlow.value = formatTtsRateValue(ttsSpeechRate)
+                                        SliderDialogView.INSTANCE.cast(
+                                            applicationContext = applicationContext,
+                                            initialValue = ttsSpeechRate,
+                                            valueRange = 0.5f..5.0f,
+                                            steps = 8,
+                                            onValueChange = { value ->
+                                                val snappedValue = snapToStep(
+                                                    value = value,
+                                                    step = 0.5f,
+                                                    min = 0.5f,
+                                                    max = 5.0f,
+                                                )
+                                                viewModel.updateTtsSpeechRate(snappedValue)
+                                                settingFloatFlow.value = snappedValue
+                                                settingStringFlow.value = formatTtsRateValue(snappedValue)
+                                            },
+                                            menuText = Pair(getString(R.string.settings_menu_tts_rate), ttsSpeechRateTextOffset.value),
+                                            menuSubtext = Pair(settingStringFlow, ttsSpeechRateSubtextOffset.value),
+                                            playDefaultSample = true,
+                                            onDismissRequest = {
+                                                SliderDialogView.INSTANCE.clear()
                                             },
                                         )
-
-                                        /*
-                                            Speech rate. 1.0 is the normal speech rate,
-                                            lower values slow down the speech (0.5 is half the normal speech rate),
-                                            greater values accelerate it (2.0 is twice the normal speech rate).
-                                         */
-                                        var isToggled by remember { mutableStateOf(false) }
-                                        LaunchedEffect(ttsSpeechRate) {
-                                            while (true) {
-                                                delay((((2.2f - ttsSpeechRate) / 4) * 1000).toLong())
-                                                isToggled = !isToggled
-                                            }
-                                        }
-
-                                        Crossfade(targetState = isToggled, label = "Crossfade") { toggled ->
-                                            val imageResource = if (toggled) R.drawable.tts_rate_0 else R.drawable.tts_rate_1
-                                            Image(
-                                                painter = painterResource(id = imageResource),
-                                                contentDescription = getString(R.string.settings_menu_tts_rate),
-                                                colorFilter = ColorFilter.tint(Color(0xFF848487)),
-                                                modifier = Modifier
-                                                    .size(28.dp)
-                                                    .onGloballyPositioned { layoutCoordinates ->
-                                                        val offset = layoutCoordinates.positionOnScreen()
-                                                        val startPadding = paddingValues
-                                                            .calculateLeftPadding(layoutDirection)
-                                                            .toPx(context)
-                                                        val posX = offset.x.toInt() - startPadding
-                                                        ttsSpeechRateIconOffset.value = Point(posX, offset.y.toInt())
-                                                    }
-                                            )
-                                        }
                                     }
                                 }
-                            }
+                            )
+
+                            MenuTextItem(
+                                menuItemPosition = MenuItemPosition.Bottom,
+                                text = getString(R.string.settings_menu_tts_pitch),
+                                paddingValues = paddingValues,
+                                onTextPositioned = { offset ->
+                                    ttsPitchTextOffset.value = Point(offset.x - startPadding, offset.y)
+                                },
+                                subText = formatSingleDecimal(ttsPitch),
+                                onSubtextPositioned = { offset ->
+                                    ttsPitchSubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                                },
+                                onClick = {
+                                    coroutineScope.launch {
+                                        settingFloatFlow.value = ttsPitch
+                                        settingStringFlow.value = formatSingleDecimal(ttsPitch)
+                                        SliderDialogView.INSTANCE.cast(
+                                            applicationContext = applicationContext,
+                                            initialValue = ttsPitch,
+                                            valueRange = 0.5f..2.0f,
+                                            steps = 0,
+                                            onValueChange = { value ->
+                                                val snappedValue = snapToStep(
+                                                    value = value,
+                                                    step = 0.2f,
+                                                    min = 0.5f,
+                                                    max = 2.0f,
+                                                )
+                                                viewModel.updateTtsPitch(snappedValue)
+                                                settingFloatFlow.value = snappedValue
+                                                settingStringFlow.value = formatSingleDecimal(snappedValue)
+                                            },
+                                            menuText = Pair(getString(R.string.settings_menu_tts_pitch), ttsPitchTextOffset.value),
+                                            menuSubtext = Pair(settingStringFlow, ttsPitchSubtextOffset.value),
+                                            playDefaultSample = true,
+                                            onDismissRequest = {
+                                                SliderDialogView.INSTANCE.clear()
+                                            },
+                                        )
+                                    }
+                                }
+                            )
 
                             MenuCategory(
                                 icon = Icons.Outlined.Info,
@@ -1645,49 +1555,8 @@ class SettingsActivity : AVDActivity() {
                                 isRtl = isRtl,
                             )
 
-                            with(sharedTransitionScope) {
-                                MenuItem(
-                                    menuItemPosition = MenuItemPosition.Top,
-                                    onClick = {
-                                        onShowPremium()
-                                        viewModel.analyticsRepository.screenViewReport("Premium")
-                                    },
-                                ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(min = 50.dp)
-                                            .padding(end = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        Column {
-                                            MenuText(
-                                                text = stringResource(id = onPremiumTreeTrialTextResource.intValue),
-                                                modifier = Modifier
-                                                    .sharedElement(
-                                                        rememberSharedContentState(key = "menu_premium"),
-                                                        animatedVisibilityScope = animatedVisibilityScope
-                                                    )
-                                            )
-                                            MenuSubText(
-                                                text = context.getString(R.string.settings_menu_premium_free_trial_remain, TrialLimitInfo.trialRemainMinutes(context)),
-                                                paddingValues = paddingValues
-                                            )
-                                        }
-
-                                        Image(
-                                            painter = painterResource(id = R.drawable.image_premium_gray),
-                                            contentDescription = "image_premium",
-                                            colorFilter = ColorFilter.tint(Color(0xFF848487)),
-                                            modifier = Modifier.size(28.dp)
-                                        )
-                                    }
-                                }
-                            }
-
                             MenuItem(
-                                menuItemPosition = MenuItemPosition.Bottom,
+                                menuItemPosition = MenuItemPosition.Single,
                                 onClick = {
                                     context.gotoStore(
                                         newTask = false,
@@ -1740,7 +1609,124 @@ class SettingsActivity : AVDActivity() {
                     }
                 }
             }
+    }
+
+    @Composable
+    fun <T> TtsSelectionDialog(
+        title: String,
+        options: List<T>,
+        optionKey: (T) -> String,
+        optionLabel: (T) -> String,
+        optionSupportingText: (T) -> String,
+        isSelected: (T) -> Boolean,
+        onSelect: (T) -> Unit,
+        onOptionAction: ((T) -> Unit)? = null,
+        optionActionContentDescription: (T) -> String = { "" },
+        searchEnabled: Boolean = false,
+        searchPlaceholder: String = title,
+        onDismiss: () -> Unit,
+    ) {
+        var searchQuery by remember(title, options) { mutableStateOf("") }
+        val filteredOptions = remember(options, searchEnabled, searchQuery) {
+            if (!searchEnabled || searchQuery.isBlank()) {
+                options
+            } else {
+                options.filter { option ->
+                    optionLabel(option).contains(searchQuery, ignoreCase = true) ||
+                        optionSupportingText(option).contains(searchQuery, ignoreCase = true)
+                }
+            }
         }
+
+        AlertDialog(
+            onDismissRequest = onDismiss,
+            title = {
+                Text(text = title)
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                ) {
+                    if (searchEnabled) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 12.dp),
+                            singleLine = true,
+                            label = {
+                                Text(text = searchPlaceholder)
+                            }
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp)
+                    ) {
+                        LazyColumn {
+                            items(filteredOptions, key = optionKey) { option ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            onSelect(option)
+                                            onDismiss()
+                                        }
+                                        .padding(vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = isSelected(option),
+                                        onClick = {
+                                            onSelect(option)
+                                            onDismiss()
+                                        }
+                                    )
+                                    Column(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .padding(start = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = optionLabel(option),
+                                            style = MaterialTheme.typography.bodyLarge
+                                        )
+                                        Text(
+                                            text = optionSupportingText(option),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color.Gray
+                                        )
+                                    }
+                                    onOptionAction?.let { action ->
+                                        IconButton(
+                                            onClick = {
+                                                action(option)
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PlayArrow,
+                                                contentDescription = optionActionContentDescription(option),
+                                                tint = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(text = stringResource(android.R.string.cancel))
+                }
+            }
+        )
     }
 
     @Composable
@@ -1802,7 +1788,6 @@ class SettingsActivity : AVDActivity() {
         composable: @Composable () -> Unit,
     ) {
         val cornerRound = 32.dp
-        val coroutineScope = rememberCoroutineScope()
         val shape = when (menuItemPosition) {
             MenuItemPosition.Single -> RoundedCornerShape(cornerRound)
             MenuItemPosition.Top -> RoundedCornerShape(topStart = cornerRound, topEnd = cornerRound)
@@ -1834,12 +1819,7 @@ class SettingsActivity : AVDActivity() {
             Button(
                 enabled = onClick != null,
                 onClick = {
-                    onClick?.let {
-                        coroutineScope.launch {
-                            delay(200L)
-                            onClick()
-                        }
-                    }
+                    onClick?.invoke()
                 },
                 colors = ButtonDefaults.textButtonColors(contentColor = buttonColor),
                 shape = shape,
@@ -1949,63 +1929,5 @@ class SettingsActivity : AVDActivity() {
             style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontSize),
         )
 
-    }
-
-    private fun appReview() {
-        Timber.tag(TAG).d("appReview()")
-        val manager =
-            if (BuildConfig.DEBUG) {
-                FakeReviewManager(applicationContext)
-            } else {
-                ReviewManagerFactory.create(applicationContext)
-            }
-
-        lifecycleScope.launch {
-            val trialCount = viewModel.secureRepository.getTrialCount()
-            Timber.tag(TAG).d("appReview() trialCount $trialCount")
-            val isReviewDone = viewModel.preferenceRepository.isReviewDoneFlow.first()
-            Timber.tag(TAG).d("appReview() isReviewDone $isReviewDone")
-            if (trialCount > 30 && !isReviewDone) {
-                while (true) {
-                    delay(3000L)
-                    if (
-                        !LanguageListView.INSTANCE.isRunning.get()
-                        && !HelpTextDetectModeView.INSTANCE.isRunning.get()
-                        && !HelpTranslationKitView.INSTANCE.isRunning.get()
-                        && !SliderDialogView.INSTANCE.isRunning.get()
-                        && !VoiceListView.INSTANCE.isRunning.get()
-                    ) {
-                        Timber.tag(TAG).d("All states are false. Proceeding with review flow.")
-                        startReviewFlow(manager)  // 리뷰 플로우 시작
-                        break  // 반복 종료
-                    }
-                }
-            }
-        }
-    }
-
-    private fun startReviewFlow(manager: ReviewManager) {
-        MenuBarView.INSTANCE.clear()
-        TargetHandleView.INSTANCE.clear()
-
-        val request = manager.requestReviewFlow()
-//        Timber.tag(TAG).d("appReview() startReviewFlow request $request")
-        request.addOnCompleteListener { task ->
-//            Timber.tag(TAG).d("appReview() startReviewFlow task ${task.isSuccessful}")
-            if (task.isSuccessful) {
-                val reviewInfo = task.result
-                val flow = manager.launchReviewFlow(this, reviewInfo)
-                flow.addOnCompleteListener { _ ->
-                    viewModel.updateIsReviewDone()
-                }
-            } else {
-                val reviewErrorCode = (task.exception as ReviewException).errorCode
-                Timber.tag(TAG).d("appReview() startReviewFlow reviewErrorCode $reviewErrorCode")
-            }
-            lifecycleScope.launch {
-                MenuBarView.INSTANCE.cast(applicationContext)
-                TargetHandleView.INSTANCE.cast(applicationContext)
-            }
-        }
     }
 }

@@ -45,12 +45,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.billingclient.api.Purchase
 import com.galaxy.airviewdictionary.core.OverlayService
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationKitType
-import com.galaxy.airviewdictionary.ui.screen.main.SettingsActivity
 import com.galaxy.airviewdictionary.ui.screen.overlay.OverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.MenuBarViewModel
 import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.TranslationKitIconButton
@@ -92,17 +88,10 @@ class HelpTranslationKitView private constructor() : OverlayView() {
 
     override val composable: @Composable () -> Unit = @Composable {
         if (isAttachedToWindow()) {
-            val context = LocalContext.current
-            val lifecycleOwner = LocalLifecycleOwner.current
             val configuration = LocalConfiguration.current
             val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
 
             val translationKitType = remember { mutableStateOf(initialTranslationKitType) }
-
-            val purchaseState by menuBarViewModel.billingRepository.purchaseStateFlow.collectAsStateWithLifecycle(
-                lifecycle = lifecycleOwner.lifecycle,
-                initialValue = Purchase.PurchaseState.UNSPECIFIED_STATE
-            )
 
             if (isPortrait) {
                 Column(
@@ -144,11 +133,8 @@ class HelpTranslationKitView private constructor() : OverlayView() {
                     ) {
                         ProductBox(
                             isFree = translationKitType.value == TranslationKitType.GOOGLE,
-                            needsPurchase = purchaseState != Purchase.PurchaseState.PURCHASED,
-                            onPurchase = {
-                                clear()
-                                SettingsActivity.purchase(context = context)
-                            }
+                            needsPurchase = false,
+                            onPurchase = {}
                         )
                     }
                 }
@@ -187,11 +173,8 @@ class HelpTranslationKitView private constructor() : OverlayView() {
                     ) {
                         ProductBox(
                             isFree = translationKitType.value == TranslationKitType.GOOGLE,
-                            needsPurchase = purchaseState != Purchase.PurchaseState.PURCHASED,
-                            onPurchase = {
-                                clear()
-                                SettingsActivity.purchase(context = context)
-                            }
+                            needsPurchase = false,
+                            onPurchase = {}
                         )
                     }
                 }

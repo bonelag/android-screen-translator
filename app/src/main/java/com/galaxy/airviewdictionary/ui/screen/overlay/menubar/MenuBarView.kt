@@ -151,9 +151,6 @@ class MenuBarView private constructor() : OverlayView() {
             // SettingsActivity live 상태 flow
             val settingsActivityLiveState by SettingsActivity.liveStateFlow.collectAsStateWithLifecycle()
 
-            // PremiumView live 상태 flow
-            val premiumState by SettingsActivity.premiumViewVisibleStateFlow.collectAsStateWithLifecycle()
-
             // Drag handle dock state
             val dragHandleDockState by targetHandleViewModel.dockStateFlow.collectAsStateWithLifecycle()
 
@@ -171,7 +168,6 @@ class MenuBarView private constructor() : OverlayView() {
                 captureStatus,
                 targetHandleMotionEventState,
                 settingsActivityLiveState,
-                premiumState,
                 dragHandleDockState,
                 textDetectMode,
                 fixedAreaViewState
@@ -179,7 +175,7 @@ class MenuBarView private constructor() : OverlayView() {
 
                 view?.let {
                     val menuVisible = when {
-                        settingsActivityLiveState -> !premiumState
+                        settingsActivityLiveState -> true
                         captureStatus != CaptureStatus.Requested
                                 && targetHandleMotionEventState != MotionEvent.ACTION_MOVE
                                 && (!dragHandleDockState || menuBarDragState.value == MenuBarDragStates.Handling)

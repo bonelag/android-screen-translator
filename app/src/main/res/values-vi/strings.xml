@@ -85,7 +85,7 @@
   <string name="settings_menu_premium_free_trial_remain">Còn lại %1$d phút</string>
   <string name="settings_menu_your_premium_benefits">Lợi ích của bạn</string>
   <string name="settings_menu_your_premium_benefits_peding">Lợi ích (đang chờ)</string>
-  <string name="settings_menu_app_version">Phiên bản ứng dụng</string>
+  <string name="settings_menu_app_version">Phiên bản</string>
   <string name="settings_menu_app_version_latest">(Mới nhất)</string>
 
   <!-- HelpTextDetectModeView, HelpTranslationKitView -->

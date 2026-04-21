@@ -41,7 +41,6 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.billingclient.api.Purchase
 import com.galaxy.airviewdictionary.R
 import com.galaxy.airviewdictionary.core.OverlayService
 import com.galaxy.airviewdictionary.data.local.capture.CapturePreventedException
@@ -49,7 +48,6 @@ import com.galaxy.airviewdictionary.data.local.capture.CaptureResponse
 import com.galaxy.airviewdictionary.data.local.capture.NoMediaProjectionTokenException
 import com.galaxy.airviewdictionary.data.local.screen.ScreenInfo
 import com.galaxy.airviewdictionary.data.local.screen.ScreenInfoHolder
-import com.galaxy.airviewdictionary.data.local.secure.TrialLimitInfo
 import com.galaxy.airviewdictionary.data.local.vision.TextDetectMode
 import com.galaxy.airviewdictionary.data.local.vision.model.Transaction
 import com.galaxy.airviewdictionary.data.local.vision.model.VisionResponse
@@ -364,25 +362,7 @@ open class FixedAreaView : OverlayView() {
                                         dialogText = context.getString(R.string.message_translate_fixedarea_warn_detail),
                                         onConfirm = {
                                             launchInOverlayViewCoroutineScope {
-                                                val purchaseState: Int = targetHandleViewModel.billingRepository.purchaseStateFlow.first()
-                                                if (purchaseState == Purchase.PurchaseState.PURCHASED) {
-                                                    start()
-                                                }
-                                                // 구매하지 않은 유저에게 구매유도 팝업 안내
-                                                else {
-                                                    DialogView.INSTANCE.cast(
-                                                        applicationContext = context,
-                                                        icon = Icons.Default.Campaign,
-                                                        dialogTitle = context.getString(R.string.message_translate_fixedarea_promotion),
-                                                        dialogText = context.getString(
-                                                            R.string.message_translate_fixedarea_promotion_detail,
-                                                            TrialLimitInfo.getFixedAreaViewCampaignPeriodMinute(context).toString()
-                                                        ),
-                                                        onConfirm = {
-                                                            start()
-                                                        }
-                                                    )
-                                                }
+                                                start()
                                             }
                                         }
                                     )
@@ -479,23 +459,10 @@ open class FixedAreaView : OverlayView() {
         fixedAreaViewStateFlowJob?.cancel()
         fixedAreaViewStateFlow.value = State.Translating
         translateJob = launchInOverlayViewCoroutineScope {
-            val campaignPeriodMinute = TrialLimitInfo.getFixedAreaViewCampaignPeriodMinute(context)
-            val purchaseState: Int = targetHandleViewModel.billingRepository.purchaseStateFlow.first()
-            val startTime = System.nanoTime()
             while (fixedAreaViewStateFlow.value == State.Translating || fixedAreaViewStateFlow.value == State.TranslatingHandling) {
                 // 0.1초 간격
                 delay(100)
-                val elapsedTimeMillis = (System.nanoTime() - startTime) / 1_000_000 // 나노초를 밀리초로 변환
-//                Timber.tag(TAG).d("==== $campaignPeriodMinute, $purchaseState,  $elapsedTimeMillis")
-                // campaignPeriodMinute 가 지나면 구매 유도
-                if (purchaseState != Purchase.PurchaseState.PURCHASED && elapsedTimeMillis > (60000 * campaignPeriodMinute)) {
-                    targetHandleViewModel.inducePurchase()
-                    clear()
-                }
-                // 화면 캡처 + OCR 요청
-                else {
-                    requestVision(context, selectedArea)
-                }
+                requestVision(context, selectedArea)
             }
         }
     }
@@ -578,7 +545,6 @@ open class FixedAreaView : OverlayView() {
                         )
                         Timber.tag(TAG).d("===== $translationKitType ${it.result.resultText}")
                         translationFlow.value = it.result.resultText ?: ""
-                        targetHandleViewModel.increaseTrialCount()
                     }
 
                     is TranslationResponse.Error -> {

@@ -79,6 +79,14 @@ class SplashActivity : AVDActivity() {
 
     private val viewModel: SplashViewModel by viewModels()
 
+    private fun canOpenSettingsDirectly(): Boolean {
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        val areNotificationsEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            notificationManager.areNotificationsEnabled()
+        val canDrawOverlays = Settings.canDrawOverlays(applicationContext)
+        return areNotificationsEnabled && canDrawOverlays
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -90,14 +98,12 @@ class SplashActivity : AVDActivity() {
             if (!wasTrailerShown) {
                 OnBoardingActivity.start(applicationContext)
                 finish()
+            } else if (canOpenSettingsDirectly()) {
+                SettingsActivity.start(applicationContext)
+                finish()
             } else {
-                val layoutParams = window.attributes
-                layoutParams.dimAmount = 0.90f
-                window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-                window.attributes = layoutParams
-
                 setContent {
-                    DelayedFadeInContent()
+                    Splash()
                 }
             }
         }
@@ -166,13 +172,7 @@ class SplashActivity : AVDActivity() {
 
         val (mediaProjectionState, setMediaProjectionState) = remember {
             mutableStateOf(
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
-                    || CaptureRepository.mediaProjectionToken != null
-                    || isTargetHandleRunning
-                )
-                    PermissionStatus.Granted
-                else
-                    PermissionStatus.Prepared
+                PermissionStatus.Granted
             )
         }
 
@@ -189,7 +189,6 @@ class SplashActivity : AVDActivity() {
 
         LaunchedEffect(notificationPermissionState_0) {
             if (notificationPermissionState_0 == PermissionStatus.Ready) {
-                delay(400)
                 notificationPermissionLauncher_0.launch(android.Manifest.permission.POST_NOTIFICATIONS).also {
                     setNotificationPermissionState_0(PermissionStatus.Requested)
                 }
@@ -204,7 +203,6 @@ class SplashActivity : AVDActivity() {
 
         LaunchedEffect(notificationPermissionState_1) {
             if (notificationPermissionState_1 == PermissionStatus.Ready) {
-                delay(400)
                 notificationPermissionLauncher_1.launch(Intent(context, NotificationPermissionRequesterActivity::class.java))
                     .also { setNotificationPermissionState_1(PermissionStatus.Requested) }
             }
@@ -274,7 +272,6 @@ class SplashActivity : AVDActivity() {
             if ((notificationPermissionState_0 == PermissionStatus.Granted || notificationPermissionState_1 == PermissionStatus.Granted)
                 && overlayPermissionState == PermissionStatus.Ready
             ) {
-                delay(400)
                 overlayPermissionLauncher.launch(
                     Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
                         data = Uri.parse("package:${context.packageName}")
@@ -323,7 +320,6 @@ class SplashActivity : AVDActivity() {
                 && overlayPermissionState == PermissionStatus.Granted
                 && mediaProjectionState == PermissionStatus.Ready
             ) {
-                delay(300)
                 mediaProjectionLauncher.launch(Intent(context, ScreenCapturePermissionRequesterActivity::class.java))
                     .also { setMediaProjectionState(PermissionStatus.Requested) }
             }
@@ -346,7 +342,7 @@ class SplashActivity : AVDActivity() {
 //            }
 
 //            val permitRequiredCount = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE || isTargetHandleRunning) 2 else 3
-            val permitRequiredCount = if (CaptureRepository.mediaProjectionToken != null) 2 else 3
+            val permitRequiredCount = 2
             var permitRequestIndex = 1
             if (notificationPermissionState_0 == PermissionStatus.Granted || notificationPermissionState_1 == PermissionStatus.Granted) permitRequestIndex++
             if (overlayPermissionState == PermissionStatus.Granted) permitRequestIndex++
@@ -383,24 +379,18 @@ class SplashActivity : AVDActivity() {
             }
         }
 
-        LaunchedEffect(notificationPermissionState_0, notificationPermissionState_1, overlayPermissionState, mediaProjectionState) {
+        LaunchedEffect(notificationPermissionState_0, notificationPermissionState_1, overlayPermissionState) {
             if (
-                isTargetHandleRunning
-                && (notificationPermissionState_0 == PermissionStatus.Granted || notificationPermissionState_1 == PermissionStatus.Granted)
+                (notificationPermissionState_0 == PermissionStatus.Granted || notificationPermissionState_1 == PermissionStatus.Granted)
                 && overlayPermissionState == PermissionStatus.Granted
-                && mediaProjectionState == PermissionStatus.Granted
             ) {
-                delay(200)
                 SettingsActivity.start(context)
                 finish()
             }
         }
 
         AnimatedVisibility(
-            visible = !isTargetHandleRunning
-                    && (notificationPermissionState_0 == PermissionStatus.Granted || notificationPermissionState_1 == PermissionStatus.Granted)
-                    && overlayPermissionState == PermissionStatus.Granted
-                    && mediaProjectionState == PermissionStatus.Granted,
+            visible = false,
             enter = fadeIn(animationSpec = tween(dialogAnimDuration)) + scaleIn(animationSpec = tween(dialogAnimDuration)),
             exit = fadeOut(animationSpec = tween(dialogAnimDuration)) + scaleOut(animationSpec = tween(dialogAnimDuration)),
             content = {
@@ -411,7 +401,6 @@ class SplashActivity : AVDActivity() {
                     onConfirmLabel = stringResource(id = R.string.label_confirm_start_foreground_service),
                     onConfirm = {
                         coroutineScope.launch {
-                            delay(200)
 //                            TargetHandleView.INSTANCE.cast(applicationContext)
                             SettingsActivity.start(context)
                             finish()

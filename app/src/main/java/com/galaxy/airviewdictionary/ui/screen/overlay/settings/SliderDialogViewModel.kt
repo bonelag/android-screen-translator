@@ -48,6 +48,7 @@ class SliderDialogViewModel(
     fun playSampleVoice(text_: String = "I speak at this rate.") {
         viewModelScope.launch {
             val ttsSpeechRate = preferenceRepository.ttsSpeechRateFlow.first()
+            val ttsPitch = preferenceRepository.ttsPitchFlow.first()
             val voice: Voice? = ttsRepository.currentVoiceFlow.first()
             var text = text_
 
@@ -65,7 +66,7 @@ class SliderDialogViewModel(
                 }
             }
 
-            ttsRepository.playTTS(text, ttsSpeechRate)
+            ttsRepository.playTTS(text, ttsSpeechRate, ttsPitch)
         }
     }
 

@@ -1,7 +1,6 @@
 package com.galaxy.airviewdictionary
 
 import android.app.Application
-import com.google.android.gms.ads.MobileAds
 import com.google.firebase.Firebase
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.analytics.analytics
@@ -9,9 +8,6 @@ import com.google.firebase.appcheck.appCheck
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.google.firebase.initialize
 import dagger.hilt.android.HiltAndroidApp
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import timber.log.Timber
 
 @HiltAndroidApp
@@ -44,11 +40,6 @@ class App : Application() {
                 FirebaseAnalytics.ConsentType.AD_USER_DATA to FirebaseAnalytics.ConsentStatus.GRANTED
             )
             Firebase.analytics.setConsent(consentMap)
-        }
-
-        CoroutineScope(Dispatchers.IO).launch {
-            // Initialize the Google Mobile Ads SDK on a background thread.
-            MobileAds.initialize(applicationContext) {}
         }
     }
 }

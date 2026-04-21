@@ -67,7 +67,11 @@ class PreferenceRepository @Inject constructor(@ApplicationContext val context: 
         val CORRECTION_KIT_TYPE = stringPreferencesKey("correction_kit_type")
         val AUTOMATIC_TRANSLATION_PLAYBACK = booleanPreferencesKey("automatic_translation_playback")
         val TTS_SPEECH_RATE = floatPreferencesKey("tts_speech_rate")
+        val TTS_PITCH = floatPreferencesKey("tts_pitch")
+        val TTS_LANGUAGE_TAG = stringPreferencesKey("tts_language_tag")
+        val TTS_VOICE_NAME = stringPreferencesKey("tts_voice_name")
         val TTS_ORDERED_VOICE_NAMES = stringPreferencesKey("tts_ordered_voice_names")
+        val TTS_ENGINE_PACKAGE = stringPreferencesKey("tts_engine_package")
 
         val SOURCE_LANGUAGE_CODE_HISTORY = stringPreferencesKey("source_language_code_history")
         val TARGET_LANGUAGE_CODE_HISTORY = stringPreferencesKey("target_language_code_history")
@@ -196,10 +200,26 @@ class PreferenceRepository @Inject constructor(@ApplicationContext val context: 
         preferences[TTS_SPEECH_RATE] ?: 1.0f
     }
 
+    val ttsPitchFlow: Flow<Float> = preferenceFlow.map { preferences ->
+        preferences[TTS_PITCH] ?: 1.0f
+    }
+
+    val ttsLanguageTagFlow: Flow<String> = preferenceFlow.map { preferences ->
+        preferences[TTS_LANGUAGE_TAG] ?: ""
+    }
+
+    val ttsVoiceNameFlow: Flow<String> = preferenceFlow.map { preferences ->
+        preferences[TTS_VOICE_NAME] ?: ""
+    }
+
     val ttsOrderedVoiceNamesFlow: Flow<List<String>> = preferenceFlow.map { preferences ->
         preferences[TTS_ORDERED_VOICE_NAMES]?.let { jsonString ->
             gson.fromJson(jsonString, object : TypeToken<List<String>>() {}.type)
         } ?: listOf()
+    }
+
+    val ttsEnginePackageFlow: Flow<String> = preferenceFlow.map { preferences ->
+        preferences[TTS_ENGINE_PACKAGE] ?: ""
     }
 
     val sourceLanguageCodeHistoryFlow: Flow<List<String>> = preferenceFlow.map { preferences ->

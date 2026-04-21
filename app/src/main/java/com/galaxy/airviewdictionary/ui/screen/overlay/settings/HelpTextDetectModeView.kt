@@ -43,14 +43,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.android.billingclient.api.Purchase
 import com.galaxy.airviewdictionary.R
 import com.galaxy.airviewdictionary.core.OverlayService
 import com.galaxy.airviewdictionary.data.local.vision.TextDetectMode
 import com.galaxy.airviewdictionary.ui.common.MP4Player
-import com.galaxy.airviewdictionary.ui.screen.main.SettingsActivity
 import com.galaxy.airviewdictionary.ui.screen.overlay.OverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.MenuBarViewModel
 import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.TextDetectModeIconButton
@@ -92,17 +88,10 @@ class HelpTextDetectModeView private constructor() : OverlayView() {
 
     override val composable: @Composable () -> Unit = @Composable {
         if (isAttachedToWindow()) {
-            val context = LocalContext.current
-            val lifecycleOwner = LocalLifecycleOwner.current
             val configuration = LocalConfiguration.current
             val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
 
             val textDetectMode = remember { mutableStateOf(initialDetectMode) }
-
-            val purchaseState by menuBarViewModel.billingRepository.purchaseStateFlow.collectAsStateWithLifecycle(
-                lifecycle = lifecycleOwner.lifecycle,
-                initialValue = Purchase.PurchaseState.UNSPECIFIED_STATE
-            )
 
             if (isPortrait) {
                 Column(
@@ -143,11 +132,8 @@ class HelpTextDetectModeView private constructor() : OverlayView() {
                     ) {
                         ProductBox(
                             isFree = textDetectMode.value == TextDetectMode.WORD,
-                            needsPurchase = purchaseState != Purchase.PurchaseState.PURCHASED,
-                            onPurchase = {
-                                clear()
-                                SettingsActivity.purchase(context = context)
-                            }
+                            needsPurchase = false,
+                            onPurchase = {}
                         )
                     }
                 }
@@ -186,11 +172,8 @@ class HelpTextDetectModeView private constructor() : OverlayView() {
                     ) {
                         ProductBox(
                             isFree = textDetectMode.value == TextDetectMode.WORD,
-                            needsPurchase = purchaseState != Purchase.PurchaseState.PURCHASED,
-                            onPurchase = {
-                                clear()
-                                SettingsActivity.purchase(context = context)
-                            }
+                            needsPurchase = false,
+                            onPurchase = {}
                         )
                     }
                 }

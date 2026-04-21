@@ -32,7 +32,6 @@ import com.galaxy.airviewdictionary.data.local.secure.SecureRepository
 import com.galaxy.airviewdictionary.data.local.tts.TTSRepository
 import com.galaxy.airviewdictionary.data.local.vision.VisionRepository
 import com.galaxy.airviewdictionary.data.remote.ai.CorrectionRepository
-import com.galaxy.airviewdictionary.data.remote.billing.BillingRepository
 import com.galaxy.airviewdictionary.data.remote.firebase.AnalyticsRepository
 import com.galaxy.airviewdictionary.data.remote.firebase.RemoteConfigRepository
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationRepository
@@ -206,9 +205,6 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
 //    lateinit var geoLocaleRepository: GeoLocaleRepository
 
     @Inject
-    lateinit var billingRepository: BillingRepository
-
-    @Inject
     lateinit var preferenceRepository: PreferenceRepository
 
     @Inject
@@ -243,7 +239,6 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
                 applicationContext = applicationContext,
                 secureRepository = secureRepository,
                 remoteConfigRepository = remoteConfigRepository,
-                billingRepository = billingRepository,
                 preferenceRepository = preferenceRepository,
                 captureRepository = captureRepository,
                 visionRepository = visionRepository.apply { addObserver(lifecycle) },
@@ -270,7 +265,6 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
         if (!::menuBarViewModel.isInitialized) {
             val viewModelFactory = MenuBarViewModelFactory(
                 applicationContext = applicationContext,
-                billingRepository = billingRepository,
                 preferenceRepository = preferenceRepository,
                 translationRepository = translationRepository,
             )

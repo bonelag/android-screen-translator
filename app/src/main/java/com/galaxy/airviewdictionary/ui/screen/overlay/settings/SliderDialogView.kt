@@ -57,6 +57,8 @@ class SliderDialogView private constructor() : OverlayView() {
     private val onValueChange = mutableStateOf<((Float) -> Unit)?>(null)
     private val onDismissRequest = mutableStateOf<(() -> Unit)?>(null)
     private val speechRateText = mutableStateOf<String?>(null)
+    private val onSamplePlayback = mutableStateOf<(() -> Unit)?>(null)
+    private val playDefaultSample = mutableStateOf(false)
 
     override var layoutParams: WindowManager.LayoutParams = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
@@ -102,6 +104,8 @@ class SliderDialogView private constructor() : OverlayView() {
         menuBarVisibilityText: Pair<MutableStateFlow<String>, Point>? = null,
         menuBarConfigText: Pair<MutableStateFlow<String>, Point>? = null,
         speechRateText: Pair<MutableStateFlow<Float>, Point>? = null,
+        onSamplePlayback: (() -> Unit)? = null,
+        playDefaultSample: Boolean = false,
         onDismissRequest: () -> Unit,
     ) {
         menuText?.let {
@@ -129,10 +133,14 @@ class SliderDialogView private constructor() : OverlayView() {
         this.onValueChange.value = onValueChange
         this.onDismissRequest.value = onDismissRequest
         this.speechRateText.value = if (speechRateText != null) menuText?.first else null
+        this.onSamplePlayback.value = onSamplePlayback
+        this.playDefaultSample.value = playDefaultSample
         super.cast(applicationContext)
 
-        speechRateText?.let {
-            viewModel.playSampleVoice()
+        onSamplePlayback?.invoke() ?: run {
+            if (this.playDefaultSample.value) {
+                viewModel.playSampleVoice()
+            }
         }
 
         liveStateFlow.value = true
@@ -146,6 +154,8 @@ class SliderDialogView private constructor() : OverlayView() {
         SettingsMenuBarTransparencyView.INSTANCE.clear()
         SettingsMenuBarConfigView.INSTANCE.clear()
         SettingsTTSSpeechRateView.INSTANCE.clear()
+        onSamplePlayback.value = null
+        playDefaultSample.value = false
         super.clear()
     }
 
@@ -196,8 +206,10 @@ class SliderDialogView private constructor() : OverlayView() {
                     ),
                     valueRange = valueRange,
                     onValueChangeFinished = {
-                        speechRateText.value?.let {
-                            viewModel.playSampleVoice()
+                        onSamplePlayback.value?.invoke() ?: run {
+                            if (playDefaultSample.value) {
+                                viewModel.playSampleVoice()
+                            }
                         }
                     },
                     modifier = Modifier

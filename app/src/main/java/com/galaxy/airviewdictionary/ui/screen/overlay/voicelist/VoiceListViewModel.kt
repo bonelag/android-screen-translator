@@ -9,17 +9,14 @@ import com.galaxy.airviewdictionary.data.local.preference.PreferenceRepository
 import com.galaxy.airviewdictionary.data.local.tts.TTSRepository
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationKitType
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationRepository
-import com.galaxy.airviewdictionary.extensions.language
 import com.galaxy.airviewdictionary.data.remote.translation.Language
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationResponse
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import com.galaxy.airviewdictionary.extensions.language
 
 
 @Suppress("UNCHECKED_CAST")
@@ -51,9 +48,18 @@ class VoiceListViewModel(
 
     private val TAG = javaClass.simpleName
 
+    val availableEnginesFlow = ttsRepository.availableEnginesFlow
+
+    val availableLanguagesFlow = ttsRepository.availableLanguagesFlow
+
+    val currentEnginePackageFlow = ttsRepository.currentEnginePackageFlow
+
+    val debugStateFlow = ttsRepository.debugStateFlow
+
     fun playSampleVoice(voice: Voice, text_: String = "It's a voice like this.") {
         viewModelScope.launch {
             val ttsSpeechRate = preferenceRepository.ttsSpeechRateFlow.first()
+            val ttsPitch = preferenceRepository.ttsPitchFlow.first()
             var text = text_
 
             if (voice.language.code != "en") {
@@ -71,8 +77,24 @@ class VoiceListViewModel(
             ttsRepository.playTestTTS(
                 text,
                 ttsSpeechRate,
+                ttsPitch,
                 voice
             )
+        }
+    }
+
+    fun playDebugSampleVoice(text: String) {
+        viewModelScope.launch {
+            val ttsSpeechRate = preferenceRepository.ttsSpeechRateFlow.first()
+            val ttsPitch = preferenceRepository.ttsPitchFlow.first()
+            val currentVoice = ttsRepository.currentVoiceFlow.first()
+                ?: ttsRepository.availableVoicesFlow.value.firstOrNull()
+
+            if (currentVoice != null) {
+                ttsRepository.playTestTTS(text, ttsSpeechRate, ttsPitch, currentVoice)
+            } else {
+                ttsRepository.playTTS(text, ttsSpeechRate, ttsPitch, "vi")
+            }
         }
     }
 
@@ -85,12 +107,13 @@ class VoiceListViewModel(
 
     private val ttsOrderedVoiceNamesFlow: Flow<List<String>> = preferenceRepository.ttsOrderedVoiceNamesFlow
 
-    @OptIn(ExperimentalCoroutinesApi::class)
-    val voicesFlow = ttsOrderedVoiceNamesFlow.flatMapLatest { orderedVoiceNames ->
+    val voicesFlow = combine(
+        ttsOrderedVoiceNamesFlow,
+        ttsRepository.availableVoicesFlow,
+    ) { orderedVoiceNames, availableVoices ->
         Timber.tag(TAG).d("orderedVoiceNames $orderedVoiceNames")
         // Step 1: 저장된 orderedVoiceNames 기준으로 Pair<Voice, Language> 리스트를 만든다.
         val voiceLanguagePairList = mutableListOf<Pair<Voice, Language>>()
-        val availableVoices = ttsRepository.availableVoicesFlow.filterNotNull().first()
         if (orderedVoiceNames.isEmpty()) { // 저장된 내용이 없다면
             voiceLanguagePairList.addAll(
                 availableVoices.map { voice -> voice to voice.language }
@@ -118,11 +141,17 @@ class VoiceListViewModel(
         }
 
         // Step 3: List<Triple<Int, Voice, Language>> 반환
-        flowOf(
-            voiceLanguagePairList.mapIndexed { index, pair ->
-                Triple(index, pair.first, pair.second)
-            }
-        )
+        voiceLanguagePairList.mapIndexed { index, pair ->
+            Triple(index, pair.first, pair.second)
+        }
+    }
+
+    fun selectTtsEngine(enginePackageName: String?) {
+        ttsRepository.setEnginePackage(enginePackageName)
+    }
+
+    fun refreshTtsEngines() {
+        ttsRepository.refreshAvailableEngines()
     }
 
     fun addOrUpdateOrderedVoiceNames(orderedVoices: List<Triple<Int, Voice, Language>>) {
@@ -133,7 +162,7 @@ class VoiceListViewModel(
             if(currentVoice != null ) {
                 val matchingVoiceItem = orderedVoices.firstOrNull { triple ->
                     // 현재 tts voice 의 국가코드와 같은 것을 orderedVoices 에서 탐색
-                    triple.second.name.startsWith(currentVoice.language.code)
+                    triple.second.locale.language.equals(currentVoice.locale.language, ignoreCase = true)
                 }
                 matchingVoiceItem?.let {
                     // orderedVoices 에서 찾은 우선순위 voice 를 tts 에 설정

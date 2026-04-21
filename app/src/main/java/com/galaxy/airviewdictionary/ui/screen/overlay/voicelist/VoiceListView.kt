@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,12 +37,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -51,8 +55,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -75,6 +81,8 @@ import androidx.core.view.ViewCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.galaxy.airviewdictionary.R
+import com.galaxy.airviewdictionary.data.local.tts.TtsEngineInfo
+import com.galaxy.airviewdictionary.data.local.tts.TtsLanguageInfo
 import com.galaxy.airviewdictionary.data.remote.translation.Language
 import com.galaxy.airviewdictionary.core.OverlayService
 import com.galaxy.airviewdictionary.ui.screen.overlay.OverlayView
@@ -162,6 +170,31 @@ class VoiceListView private constructor() : OverlayView() {
             initialValue = emptyList()
         )
 
+        val availableEngines: List<TtsEngineInfo> by viewModel.availableEnginesFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = emptyList()
+        )
+
+        val availableLanguages: List<TtsLanguageInfo> by viewModel.availableLanguagesFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = emptyList()
+        )
+
+        val currentEnginePackage: String by viewModel.currentEnginePackageFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = ""
+        )
+
+        val currentEngine = availableEngines.firstOrNull { it.packageName == currentEnginePackage }
+            ?: availableEngines.firstOrNull()
+
+        var showEnginePanel by remember { mutableStateOf(false) }
+        var debugText by remember { mutableStateOf("Xin chào, đây là kiểm tra giọng đọc tiếng Việt.") }
+        val debugState by viewModel.debugStateFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = ""
+        )
+
         LaunchedEffect(voices) {
             mutableVoices.clear()
             mutableVoices.addAll(voices)
@@ -229,11 +262,25 @@ class VoiceListView private constructor() : OverlayView() {
                             Text(
                                 modifier = Modifier
                                     .background(Color.Transparent)
+                                    .weight(1f)
                                     .padding(start = contentHorizontalPadding, top = 16.dp, bottom = 4.dp),
                                 text = stringResource(id = R.string.title_voice_list_view),
                                 style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
                                 color = if (isDarkMode) Color.White else Color.Black
                             )
+
+                            IconButton(
+                                modifier = Modifier.padding(end = 4.dp),
+                                onClick = {
+                                    showEnginePanel = !showEnginePanel
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "TTS engine picker",
+                                    tint = contentColor
+                                )
+                            }
 
                             IconButton(
                                 modifier = Modifier.padding(end = contentHorizontalPadding),
@@ -253,6 +300,136 @@ class VoiceListView private constructor() : OverlayView() {
                                     contentDescription = "Add voice",
                                     tint = contentColor
                                 )
+                            }
+                        }
+
+                        AnimatedVisibility(visible = showEnginePanel) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = contentHorizontalPadding, vertical = 8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = stringResource(id = R.string.settings_menu_tts_engine),
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                                            color = contentColor
+                                        )
+                                        Text(
+                                            text = currentEngine?.label ?: "No engine selected",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                                            color = Color.Gray
+                                        )
+                                        Text(
+                                            text = currentEngine?.packageName ?: "unknown",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = Color.Gray
+                                        )
+                                        Text(
+                                            text = "${availableLanguages.size} languages • ${voices.size} voices",
+                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                            color = Color.Gray
+                                        )
+                                    }
+
+                                    TextButton(
+                                        onClick = { viewModel.refreshTtsEngines() }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "Refresh TTS engines",
+                                            tint = contentColor
+                                        )
+                                    }
+                                }
+
+                                OutlinedTextField(
+                                    value = debugText,
+                                    onValueChange = { debugText = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 8.dp),
+                                    label = {
+                                        Text(text = "Test text")
+                                    },
+                                    minLines = 2,
+                                    maxLines = 4,
+                                )
+
+                                TextButton(
+                                    onClick = {
+                                        viewModel.playDebugSampleVoice(debugText)
+                                    },
+                                    modifier = Modifier.padding(top = 8.dp)
+                                ) {
+                                    Text(text = "Speak test")
+                                }
+
+                                Text(
+                                    text = if (debugState.isBlank()) "No TTS debug yet" else debugState,
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(top = 6.dp)
+                                )
+
+                                if (availableEngines.isNotEmpty()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 4.dp)
+                                    ) {
+                                        availableEngines.forEach { engine ->
+                                            val isSelected = engine.packageName == currentEnginePackage
+                                            Button(
+                                                onClick = {
+                                                    viewModel.selectTtsEngine(engine.packageName)
+                                                },
+                                                colors = ButtonDefaults.textButtonColors(
+                                                    contentColor = if (isSelected) Color(0xFF4CAF50) else contentColor
+                                                ),
+                                                modifier = Modifier.fillMaxWidth(),
+                                                shape = RectangleShape,
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = engine.label,
+                                                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                                            color = contentColor
+                                                        )
+                                                        Text(
+                                                            text = engine.packageName.takeIf { it.isNotBlank() } ?: "default engine",
+                                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                                            color = Color.Gray
+                                                        )
+                                                        Text(
+                                                            text = "${engine.languageCount} languages • ${engine.voiceCount} voices",
+                                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                                            color = Color.Gray
+                                                        )
+                                                    }
+
+                                                    if (isSelected) {
+                                                        Text(
+                                                            text = "Selected",
+                                                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Bold),
+                                                            color = Color(0xFF4CAF50)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
 
