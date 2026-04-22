@@ -123,18 +123,8 @@ fun HomeTab(
     val sourceLanguage = viewModel.translationRepository.getSupportedSourceLanguage(sourceLanguageCode)
     val targetLanguage = viewModel.translationRepository.getSupportedTargetLanguage(targetLanguageCode)
 
-    val compatibleTranslationKits = remember(sourceLanguageCode, targetLanguageCode) {
-        TranslationKitType.entries.filter { translationKitType ->
-            viewModel.translationRepository.isSupportedAsSource(
-                kitType = translationKitType,
-                code = sourceLanguageCode,
-                targetLanguageCode = targetLanguageCode,
-            ) && viewModel.translationRepository.isSupportedAsTarget(
-                kitType = translationKitType,
-                code = targetLanguageCode,
-                sourceLanguageCode = sourceLanguageCode,
-            )
-        }.ifEmpty { TranslationKitType.entries }
+    val compatibleTranslationKits = remember {
+        TranslationKitType.entries.toList()
     }
 
     val supportedSourceLanguages = remember(kitType, targetLanguageCode) {
@@ -306,18 +296,8 @@ fun TranslateTab(
     var showTargetLangDialog by rememberSaveable { mutableStateOf(false) }
     var showKitDialog by rememberSaveable { mutableStateOf(false) }
 
-    val compatibleTranslationKits = remember(sourceLanguageCode, targetLanguageCode) {
-        TranslationKitType.entries.filter { translationKitType ->
-            viewModel.translationRepository.isSupportedAsSource(
-                kitType = translationKitType,
-                code = sourceLanguageCode,
-                targetLanguageCode = targetLanguageCode,
-            ) && viewModel.translationRepository.isSupportedAsTarget(
-                kitType = translationKitType,
-                code = targetLanguageCode,
-                sourceLanguageCode = sourceLanguageCode,
-            )
-        }.ifEmpty { TranslationKitType.entries }
+    val compatibleTranslationKits = remember {
+        TranslationKitType.entries.toList()
     }
 
     val supportedSourceLanguages = remember(kitType, targetLanguageCode) {

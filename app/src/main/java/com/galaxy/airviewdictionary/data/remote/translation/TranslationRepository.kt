@@ -7,6 +7,7 @@ import com.galaxy.airviewdictionary.data.remote.translation.goolge.GoogleMlKit
 import com.galaxy.airviewdictionary.data.remote.translation.goolge.GoogleWebKit
 import com.galaxy.airviewdictionary.data.remote.translation.papago.PapagoKit
 import com.galaxy.airviewdictionary.data.remote.translation.Language
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,6 +25,50 @@ class TranslationRepository @Inject constructor(
 //    private val yandexKit: YandexKit,
     private val papagoKit: PapagoKit
 ) : AVDRepository() {
+
+    private data class CacheKey(
+        val kitType: TranslationKitType,
+        val sourceLanguageCode: String,
+        val targetLanguageCode: String,
+        val sourceText: String,
+    )
+
+    private val requestCache = object : LinkedHashMap<CacheKey, TranslationResponse.Success>(200, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<CacheKey, TranslationResponse.Success>?): Boolean {
+            return size > 200
+        }
+    }
+
+    @Synchronized
+    private fun getCached(key: CacheKey): TranslationResponse.Success? = requestCache[key]
+
+    @Synchronized
+    private fun putCache(key: CacheKey, value: TranslationResponse.Success) {
+        requestCache[key] = value
+    }
+
+    private fun rewriteKitType(
+        response: TranslationResponse,
+        requestedKitType: TranslationKitType,
+        sourceLanguageCode: String,
+        targetLanguageCode: String,
+        sourceText: String,
+    ): TranslationResponse {
+        return when (response) {
+            is TranslationResponse.Success -> {
+                TranslationResponse.Success(
+                    response.result.copy(
+                        sourceLanguageCode = response.result.sourceLanguageCode ?: sourceLanguageCode,
+                        targetLanguageCode = response.result.targetLanguageCode ?: targetLanguageCode,
+                        sourceText = response.result.sourceText ?: sourceText,
+                        translationKitType = requestedKitType,
+                    )
+                )
+            }
+
+            is TranslationResponse.Error -> response
+        }
+    }
 
     // 라틴 문자를 사용하는 언어 코드 리스트
     private val latinLanguages = setOf("en", "es", "fr", "de", "pt", "it", "ro", "nl", "sv", "no", "da", "fi", "pl", "cs", "hu", "sk", "sl")
@@ -165,6 +210,16 @@ class TranslationRepository @Inject constructor(
         sourceText: String,
         correctedText: String? = null,
     ): TranslationResponse {
+        val normalizedSourceText = correctedText ?: sourceText
+        val cacheKey = CacheKey(
+            kitType = translationKitType,
+            sourceLanguageCode = sourceLanguageCode,
+            targetLanguageCode = targetLanguageCode,
+            sourceText = normalizedSourceText,
+        )
+
+        getCached(cacheKey)?.let { return it }
+
         val translationKit: TranslationKit = getTranslationKit(translationKitType)
         if (translationKit is GoogleMlKit) {
 //            if (googleMlKit.available(sourceLanguageCode, targetLanguageCode)) {
@@ -180,18 +235,73 @@ class TranslationRepository @Inject constructor(
 //                launch { googleMlKit.downloadLanguage(targetLanguageCode) }
 //            }
 
-            return googleWebKit.request(
+            val response = googleWebKit.request(
                 sourceLanguageCode,
                 targetLanguageCode,
-                correctedText ?: sourceText
+                normalizedSourceText
             )
+            if (response is TranslationResponse.Success) {
+                putCache(cacheKey, response)
+            }
+            return response
         }
 
-        return translationKit.request(
-            sourceLanguageCode,
-            targetLanguageCode,
-            correctedText ?: sourceText
+        if (translationKitType == TranslationKitType.GOOGLE) {
+            val response = translationKit.request(
+                sourceLanguageCode,
+                targetLanguageCode,
+                normalizedSourceText
+            )
+            if (response is TranslationResponse.Success) {
+                putCache(cacheKey, response)
+            }
+            return response
+        }
+
+        val primaryResponse: TranslationResponse? = if (translationKit.available()) {
+            withTimeoutOrNull(3500L) {
+                translationKit.request(
+                    sourceLanguageCode,
+                    targetLanguageCode,
+                    normalizedSourceText
+                )
+            }
+        } else {
+            null
+        }
+
+        if (primaryResponse is TranslationResponse.Success) {
+            val normalizedResponse = rewriteKitType(
+                response = primaryResponse,
+                requestedKitType = translationKitType,
+                sourceLanguageCode = sourceLanguageCode,
+                targetLanguageCode = targetLanguageCode,
+                sourceText = normalizedSourceText,
+            )
+            if (normalizedResponse is TranslationResponse.Success) {
+                putCache(cacheKey, normalizedResponse)
+            }
+            return normalizedResponse
+        }
+
+        val fallbackResponse = googleWebKit.request(
+            sourceLanguageCode = sourceLanguageCode,
+            targetLanguageCode = targetLanguageCode,
+            sourceText = normalizedSourceText,
         )
+
+        val normalizedFallbackResponse = rewriteKitType(
+            response = fallbackResponse,
+            requestedKitType = translationKitType,
+            sourceLanguageCode = sourceLanguageCode,
+            targetLanguageCode = targetLanguageCode,
+            sourceText = normalizedSourceText,
+        )
+
+        if (normalizedFallbackResponse is TranslationResponse.Success) {
+            putCache(cacheKey, normalizedFallbackResponse)
+        }
+        return normalizedFallbackResponse
     }
 
     private fun close() {

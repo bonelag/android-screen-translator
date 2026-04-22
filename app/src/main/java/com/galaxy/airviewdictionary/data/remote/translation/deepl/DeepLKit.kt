@@ -21,7 +21,8 @@ class DeepLKit @Inject constructor(@ApplicationContext val context: Context) : T
     private lateinit var translator: Translator
 
     override fun available(): Boolean {
-        return ApiKeyInfo.apiKeyAvailable(context)
+        val apiKey = ApiKeyInfo.getApiKeyDeepl(context)
+        return !apiKey.isNullOrBlank() && !apiKey.equals("Unknown", ignoreCase = true)
     }
 
     override val supportedLanguagesAsSource: List<Language> by lazy {

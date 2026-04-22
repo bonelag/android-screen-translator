@@ -22,7 +22,8 @@ import javax.inject.Singleton
 class AzureKit @Inject constructor(@ApplicationContext val context: Context, @AzureRetrofit private val azureService: AzureService) : TranslationKit() {
 
     override fun available(): Boolean {
-        return ApiKeyInfo.apiKeyAvailable(context)
+        val apiKey = ApiKeyInfo.getApiKeyAzure(context)
+        return !apiKey.isNullOrBlank() && !apiKey.equals("Unknown", ignoreCase = true)
     }
 
     private val supportedSourceLanguageCodes: List<String> by lazy {

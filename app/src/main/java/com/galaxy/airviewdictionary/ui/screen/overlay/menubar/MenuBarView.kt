@@ -1228,29 +1228,11 @@ fun TranslationKitIconButton(
         }
     }
 
-    var nextKitType by remember { mutableStateOf<TranslationKitType?>(null) }
-
-    LaunchedEffect(sourceLanguage, targetLanguage, translationKitType) {
-        nextKitType = null
-        if (sourceLanguage == null || targetLanguage == null) {
-            nextKitType = when (translationKitType) {
-                TranslationKitType.GOOGLE -> TranslationKitType.AZURE
-                TranslationKitType.AZURE -> TranslationKitType.DEEPL
-//                TranslationKitType.DEEPL -> TranslationKitType.YANDEX
-//                TranslationKitType.YANDEX -> TranslationKitType.PAPAGO
-                TranslationKitType.DEEPL -> TranslationKitType.PAPAGO
-                TranslationKitType.PAPAGO -> TranslationKitType.GOOGLE
-            }
-        } else {
-            val commonKitTypes = sourceLanguage.supportKitTypes.toSet().intersect(targetLanguage.supportKitTypes.toSet())
-            val sortedCommonKitTypes: List<TranslationKitType> = commonKitTypes.sortedBy { it.name }
-            val currentKitTypeIndex = sortedCommonKitTypes.indexOf(translationKitType)
-            nextKitType = if (currentKitTypeIndex != -1) {
-                sortedCommonKitTypes[(currentKitTypeIndex + 1) % sortedCommonKitTypes.size]
-            } else {
-                null
-            }
-        }
+    val nextKitType: TranslationKitType = when (translationKitType) {
+        TranslationKitType.GOOGLE -> TranslationKitType.AZURE
+        TranslationKitType.AZURE -> TranslationKitType.DEEPL
+        TranslationKitType.DEEPL -> TranslationKitType.PAPAGO
+        TranslationKitType.PAPAGO -> TranslationKitType.GOOGLE
     }
 
     fun getImageResourceId(selected: Boolean): Int {
@@ -1264,13 +1246,11 @@ fun TranslationKitIconButton(
     IconButton(
         modifier = modifier.size(48.dp),
         onClick = {
-            nextKitType?.let {
-                currentKitType.value = it
-                rotationBase++ // 회전 각도를 누적
-            }
+            currentKitType.value = nextKitType
+            rotationBase++ // 회전 각도를 누적
             onClick?.let { it() }
         },
-        enabled = enabled && (nextKitType != null && nextKitType != translationKitType)
+        enabled = enabled
     ) {
         // GOOGLE 아이콘
         Image(

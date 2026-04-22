@@ -460,17 +460,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
     }
 
     private suspend fun cycleNotificationTranslator() {
-        val supportedKitTypes = TranslationKitType.entries.filter { kitType ->
-            translationRepository.isSupportedAsSource(
-                kitType = kitType,
-                code = notificationState.sourceLanguageCode,
-                targetLanguageCode = notificationState.targetLanguageCode,
-            ) && translationRepository.isSupportedAsTarget(
-                kitType = kitType,
-                code = notificationState.targetLanguageCode,
-                sourceLanguageCode = notificationState.sourceLanguageCode,
-            )
-        }
+        val supportedKitTypes = TranslationKitType.entries
 
         if (supportedKitTypes.isEmpty()) {
             return

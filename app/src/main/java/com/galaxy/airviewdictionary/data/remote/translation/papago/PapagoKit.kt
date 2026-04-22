@@ -13,8 +13,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.FormBody
 import okhttp3.RequestBody
 import timber.log.Timber
-import java.net.URLDecoder
-import java.net.URLEncoder
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -23,7 +21,8 @@ import javax.inject.Singleton
 class PapagoKit @Inject constructor(@ApplicationContext val context: Context, @PapagoRetrofit private val papagoService: PapagoService) : TranslationKit() {
 
     override fun available(): Boolean {
-        return ApiKeyInfo.apiKeyAvailable(context)
+        val apiKey = ApiKeyInfo.getApiKeyPapago(context)
+        return !apiKey.isNullOrBlank() && apiKey.contains("|") && !apiKey.equals("Unknown", ignoreCase = true)
     }
 
     private val supportedSourceLanguageCodes: List<String> by lazy {
@@ -68,6 +67,10 @@ class PapagoKit @Inject constructor(@ApplicationContext val context: Context, @P
             return true
         }
 
+        if (sourceLanguageCode.equals("auto", ignoreCase = true)) {
+            return supportedLanguageCodes.any { it.equals(code, ignoreCase = true) }
+        }
+
         return when {
             (code == "ko" || code == "en") -> supportedLanguageCodes.any { it.equals(sourceLanguageCode, ignoreCase = true) }
             (sourceLanguageCode == "ko" || sourceLanguageCode == "en") -> supportedLanguageCodes.any { it.equals(code, ignoreCase = true) }
@@ -97,14 +100,11 @@ class PapagoKit @Inject constructor(@ApplicationContext val context: Context, @P
                 throw IllegalStateException("API key might not have been initialized.")
             }
 
-            // Encode text for URL safety
-            val encodedText = URLEncoder.encode(sourceText, "UTF-8")
-
             // Build request body
             val requestBody: RequestBody = FormBody.Builder()
                 .add("source", sourceLanguageCode)
                 .add("target", targetLanguageCode)
-                .add("text", encodedText)
+                .add("text", sourceText)
                 .build()
 
             val credentials = ApiKeyInfo.getApiKeyPapago(context)?.split("|")
@@ -134,7 +134,11 @@ class PapagoKit @Inject constructor(@ApplicationContext val context: Context, @P
                 .asJsonObject["translatedText"]
                 .asString
             Timber.tag(TAG).d("translatedTextEncoded $translatedTextEncoded")
-            val resultText = URLDecoder.decode(translatedTextEncoded, "UTF-8")
+            val resultText = translatedTextEncoded
+            val detectedLanguageCode = jsonResponse["message"]
+                .asJsonObject["result"]
+                .asJsonObject["srcLangType"]
+                .asString
             Timber.tag(TAG).d("resultText $resultText")
 
             TranslationResponse.Success(
@@ -143,7 +147,7 @@ class PapagoKit @Inject constructor(@ApplicationContext val context: Context, @P
                     targetLanguageCode = targetLanguageCode,
                     sourceText = sourceText,
                     translationKitType = TranslationKitType.PAPAGO,
-                    detectedLanguageCode = sourceLanguageCode,
+                    detectedLanguageCode = detectedLanguageCode,
                     resultText = resultText
                 )
             )
