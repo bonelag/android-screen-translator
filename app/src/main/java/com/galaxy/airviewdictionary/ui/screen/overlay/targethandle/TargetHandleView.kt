@@ -215,7 +215,7 @@ class TargetHandleView private constructor() : OverlayView() {
             modifier = Modifier
                 .wrapContentSize()
 //                .background(Color.Cyan)
-                .alpha(1.0f)
+                .alpha(if (captureStatus == CaptureStatus.Requested || (textDetectMode == TextDetectMode.FIXED_AREA && fixedAreaViewState == FixedAreaView.State.Translating)) 0.01f else 1.0f)
                 .width(dimensionResource(id = R.dimen.target_handle_width))
                 .height(dimensionResource(id = R.dimen.target_handle_height)),
             horizontalAlignment = Alignment.CenterHorizontally,

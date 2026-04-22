@@ -345,6 +345,7 @@ open class AreaSelectionView : OverlayView() {
             val overlaysToHide = listOf(
                 this@AreaSelectionView,
                 MenuBarView.INSTANCE,
+                TargetHandleView.INSTANCE,
                 TranslationView.INSTANCE,
                 RealtimeTranslationOverlayView.INSTANCE,
                 RealtimeSelectionActionView.INSTANCE,
@@ -354,7 +355,7 @@ open class AreaSelectionView : OverlayView() {
                 overlaysToHide.forEach { overlay ->
                     runCatching { overlay.setWindowVisible(false) }
                 }
-                kotlinx.coroutines.delay(100) // Ensure enough time for views to be hidden before capture
+                kotlinx.coroutines.delay(100)
 
                 val captureResponse: CaptureResponse = targetHandleViewModel.captureRepository.request()
                 Timber.tag(TAG).d("captureResponse $captureResponse")

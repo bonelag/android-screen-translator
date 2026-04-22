@@ -315,10 +315,8 @@ open class FixedAreaView : OverlayView() {
                 fixedAreaViewBackgroundAlphaJob?.cancel()
                 fixedAreaViewBackgroundAlphaJob = composeScope.launch {
                     fixedAreaViewBackgroundAlpha.snapTo(BACKGROUND_ALPHA)
-                    fixedAreaViewBackgroundAlpha.animateTo(
-                        targetValue = BACKGROUND_FADE_OUT_ALPHA,
-                        animationSpec = tween(durationMillis = BACKGROUND_FADE_OUT_DURATION)
-                    )
+                    delay(3000)
+                    fixedAreaViewBackgroundAlpha.snapTo(BACKGROUND_FADE_OUT_ALPHA)
                 }
             }
         }
@@ -354,10 +352,7 @@ open class FixedAreaView : OverlayView() {
 
                                     fixedAreaViewBackgroundAlphaJob?.cancel()
                                     fixedAreaViewBackgroundAlphaJob = composeScope.launch {
-                                        fixedAreaViewBackgroundAlpha.animateTo(
-                                            targetValue = BACKGROUND_FADE_OUT_ALPHA,
-                                            animationSpec = tween(durationMillis = BACKGROUND_FADE_OUT_DURATION)
-                                        )
+                                        fixedAreaViewBackgroundAlpha.snapTo(BACKGROUND_FADE_OUT_ALPHA)
                                     }
                                 }
 
@@ -438,7 +433,6 @@ open class FixedAreaView : OverlayView() {
 
     override fun clear() {
         previousCleanCaptureBitmap = null
-        lastQuickCapturedBitmap = null
         previousSourceText = ""
         RealtimeTranslationOverlayView.INSTANCE.clear()
         FixedAreaTranslationView.INSTANCE.clear()
@@ -469,7 +463,6 @@ open class FixedAreaView : OverlayView() {
     private var detectedString = ""
 
     private var previousCleanCaptureBitmap: android.graphics.Bitmap? = null
-    private var lastQuickCapturedBitmap: android.graphics.Bitmap? = null
     private var previousSourceText: String = ""
 
     private fun calculateSimilarity(s1: String, s2: String): Float {
@@ -494,28 +487,13 @@ open class FixedAreaView : OverlayView() {
     }
 
     private suspend fun requestVision(context: Context, selectedArea: Rect) {
-        // Quick Capture (WITH overlays visible) to check if anything changed (video or our overlay)
-        val quickCaptureRes = targetHandleViewModel.captureRepository.request()
-        if (quickCaptureRes is CaptureResponse.Success) {
-            val quickCapture = createSelectionCapture(
-                originalBitmap = quickCaptureRes.bitmap,
-                selectionRect = selectedArea,
-                paddingPx = 0,
-                minimumEdgePx = 1,
-            )
-            // If the screen hasn't changed at all (video static, overlay static) since last check, do nothing!
-            if (lastQuickCapturedBitmap != null && lastQuickCapturedBitmap!!.sameAs(quickCapture.bitmap)) {
-                return
-            }
-            lastQuickCapturedBitmap = quickCapture.bitmap
-        }
-
-        // The screen changed. We must get a clean capture for OCR. So we hide the overlays.
         val overlaysToHide = listOf(
             MenuBarView.INSTANCE,
+            TargetHandleView.INSTANCE,
             RealtimeTranslationOverlayView.INSTANCE,
             RealtimeSelectionActionView.INSTANCE,
             FixedAreaTranslationView.INSTANCE,
+            this@FixedAreaView,
         )
         val screenTransaction = try {
             overlaysToHide.forEach { overlay ->
