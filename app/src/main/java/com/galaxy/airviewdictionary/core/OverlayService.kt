@@ -10,7 +10,9 @@ import android.content.res.Configuration
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
@@ -19,11 +21,17 @@ import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import com.galaxy.airviewdictionary.ACTION_SERVICE_CONTROL
+import com.galaxy.airviewdictionary.EXTRA_NOTIFICATION_SOURCE_NEXT
+import com.galaxy.airviewdictionary.EXTRA_NOTIFICATION_TARGET_NEXT
+import com.galaxy.airviewdictionary.EXTRA_NOTIFICATION_TRANSLATOR_NEXT
 import com.galaxy.airviewdictionary.EXTRA_SERVICE_STOP
 import com.galaxy.airviewdictionary.FOREGROUND_SERVICE_NOTIFICATION_ID
 import com.galaxy.airviewdictionary.NOTIFICATION_CHANNEL_ID
 import com.galaxy.airviewdictionary.NOTIFICATION_CHANNEL_NAME
 import com.galaxy.airviewdictionary.R
+import com.galaxy.airviewdictionary.REQUEST_CODE_NOTIFICATION_SOURCE
+import com.galaxy.airviewdictionary.REQUEST_CODE_NOTIFICATION_TARGET
+import com.galaxy.airviewdictionary.REQUEST_CODE_NOTIFICATION_TRANSLATOR
 import com.galaxy.airviewdictionary.REQUEST_CODE_SERVICE_STOP
 import com.galaxy.airviewdictionary.data.local.capture.CaptureRepository
 import com.galaxy.airviewdictionary.data.local.preference.PreferenceRepository
@@ -34,6 +42,8 @@ import com.galaxy.airviewdictionary.data.local.vision.VisionRepository
 import com.galaxy.airviewdictionary.data.remote.ai.CorrectionRepository
 import com.galaxy.airviewdictionary.data.remote.firebase.AnalyticsRepository
 import com.galaxy.airviewdictionary.data.remote.firebase.RemoteConfigRepository
+import com.galaxy.airviewdictionary.data.remote.translation.Language
+import com.galaxy.airviewdictionary.data.remote.translation.TranslationKitType
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationRepository
 import com.galaxy.airviewdictionary.ui.screen.intro.SplashActivity
 import com.galaxy.airviewdictionary.ui.screen.main.SettingsActivity
@@ -50,6 +60,11 @@ import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleV
 import com.galaxy.airviewdictionary.ui.screen.overlay.voicelist.VoiceListViewModel
 import com.galaxy.airviewdictionary.ui.screen.overlay.voicelist.VoiceListViewModelFactory
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -70,6 +85,16 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
         get() = savedStateRegistryController.savedStateRegistry
 
     private val binder = LocalBinder()
+    private var notificationObserverJob: Job? = null
+    private var notificationObserverStarted = false
+    private var isForegroundStarted = false
+    private var notificationState = NotificationState()
+
+    private data class NotificationState(
+        val sourceLanguageCode: String = "",
+        val targetLanguageCode: String = "",
+        val translationKitType: TranslationKitType = TranslationKitType.GOOGLE,
+    )
 
     inner class LocalBinder : Binder() {
         fun getService(): OverlayService = this@OverlayService
@@ -102,10 +127,15 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
                     buildNotification(),
                 )
             }
+            isForegroundStarted = true
+            ensureNotificationObserverStarted()
         } catch (e: SecurityException) {
             val intent = Intent(applicationContext, SplashActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to start foreground notification")
+            stopSelf()
         }
 
         intent?.let {
@@ -121,6 +151,24 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
                         stopForeground(true) // Deprecated 되었지만 API 23 지원 위해 사용
                     }
                     stopSelf()
+                }
+
+                EXTRA_NOTIFICATION_SOURCE_NEXT -> {
+                    lifecycleScope.launch {
+                        cycleNotificationSourceLanguage()
+                    }
+                }
+
+                EXTRA_NOTIFICATION_TRANSLATOR_NEXT -> {
+                    lifecycleScope.launch {
+                        cycleNotificationTranslator()
+                    }
+                }
+
+                EXTRA_NOTIFICATION_TARGET_NEXT -> {
+                    lifecycleScope.launch {
+                        cycleNotificationTargetLanguage()
+                    }
                 }
 
                 else -> {}
@@ -157,6 +205,10 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
 
     override fun onDestroy() {
         Timber.tag(TAG).i("#### onDestroy() ####")
+        notificationObserverJob?.cancel()
+        if (notificationObserverStarted) {
+            translationRepository.release()
+        }
         viewModelStore.clear()
         super.onDestroy()
     }
@@ -343,6 +395,197 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
     //                                                                                            //
     ////////////////////////////////////////////////////////////////////////////////////////////////
 
+    private fun observeNotificationState() {
+        notificationObserverJob?.cancel()
+        notificationObserverJob = lifecycleScope.launch {
+            combine(
+                preferenceRepository.sourceLanguageCodeFlow,
+                preferenceRepository.targetLanguageCodeFlow,
+                preferenceRepository.translationKitTypeFlow,
+            ) { sourceLanguageCode, targetLanguageCode, translationKitType ->
+                NotificationState(
+                    sourceLanguageCode = sourceLanguageCode,
+                    targetLanguageCode = targetLanguageCode,
+                    translationKitType = translationKitType,
+                )
+            }.distinctUntilChanged()
+                .collect { state ->
+                    notificationState = state
+                    updateForegroundNotification()
+                }
+        }
+    }
+
+    private fun ensureNotificationObserverStarted() {
+        if (notificationObserverStarted) {
+            return
+        }
+        notificationObserverStarted = true
+        translationRepository.acquire()
+        observeNotificationState()
+    }
+
+    private fun updateForegroundNotification() {
+        if (!isForegroundStarted) {
+            return
+        }
+        try {
+            val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(FOREGROUND_SERVICE_NOTIFICATION_ID, buildNotification())
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "Failed to update foreground notification")
+        }
+    }
+
+    private suspend fun cycleNotificationSourceLanguage() {
+        val nextLanguageCode = getNextLanguageCode(
+            isSourceLanguage = true,
+            currentLanguageCode = notificationState.sourceLanguageCode,
+            oppositeLanguageCode = notificationState.targetLanguageCode,
+            kitType = notificationState.translationKitType,
+        ) ?: return
+
+        preferenceRepository.addOrUpdateLanguageHistory(nextLanguageCode, true)
+    }
+
+    private suspend fun cycleNotificationTargetLanguage() {
+        val nextLanguageCode = getNextLanguageCode(
+            isSourceLanguage = false,
+            currentLanguageCode = notificationState.targetLanguageCode,
+            oppositeLanguageCode = notificationState.sourceLanguageCode,
+            kitType = notificationState.translationKitType,
+        ) ?: return
+
+        preferenceRepository.addOrUpdateLanguageHistory(nextLanguageCode, false)
+    }
+
+    private suspend fun cycleNotificationTranslator() {
+        val supportedKitTypes = TranslationKitType.entries.filter { kitType ->
+            translationRepository.isSupportedAsSource(
+                kitType = kitType,
+                code = notificationState.sourceLanguageCode,
+                targetLanguageCode = notificationState.targetLanguageCode,
+            ) && translationRepository.isSupportedAsTarget(
+                kitType = kitType,
+                code = notificationState.targetLanguageCode,
+                sourceLanguageCode = notificationState.sourceLanguageCode,
+            )
+        }
+
+        if (supportedKitTypes.isEmpty()) {
+            return
+        }
+
+        val currentIndex = supportedKitTypes.indexOf(notificationState.translationKitType)
+        val nextIndex = if (currentIndex >= 0) {
+            (currentIndex + 1) % supportedKitTypes.size
+        } else {
+            0
+        }
+        preferenceRepository.update(
+            PreferenceRepository.TRANSLATION_KIT_TYPE,
+            supportedKitTypes[nextIndex].name
+        )
+    }
+
+    private suspend fun getNextLanguageCode(
+        isSourceLanguage: Boolean,
+        currentLanguageCode: String,
+        oppositeLanguageCode: String,
+        kitType: TranslationKitType,
+    ): String? {
+        val historyCodes = if (isSourceLanguage) {
+            preferenceRepository.sourceLanguageCodeHistoryFlow.first()
+        } else {
+            preferenceRepository.targetLanguageCodeHistoryFlow.first()
+        }
+
+        val supportedLanguages = if (isSourceLanguage) {
+            translationRepository.supportedLanguagesAsSource.filter { language ->
+                translationRepository.isSupportedAsSource(kitType, language.code, oppositeLanguageCode)
+            }
+        } else {
+            translationRepository.supportedLanguagesAsTarget.filter { language ->
+                translationRepository.isSupportedAsTarget(kitType, language.code, oppositeLanguageCode)
+            }
+        }
+
+        val orderedCodes = mutableListOf<String>()
+        fun addCode(code: String) {
+            if (orderedCodes.none { it.equals(code, ignoreCase = true) }) {
+                orderedCodes.add(code)
+            }
+        }
+
+        historyCodes.forEach(::addCode)
+        supportedLanguages.map(Language::code).forEach(::addCode)
+        if (orderedCodes.none { it.equals(currentLanguageCode, ignoreCase = true) }) {
+            orderedCodes.add(0, currentLanguageCode)
+        }
+        if (orderedCodes.size <= 1) {
+            return orderedCodes.firstOrNull()
+        }
+
+        val currentIndex = orderedCodes.indexOfFirst { it.equals(currentLanguageCode, ignoreCase = true) }
+        val safeIndex = if (currentIndex >= 0) currentIndex else 0
+        return orderedCodes[(safeIndex + 1) % orderedCodes.size]
+    }
+
+    private fun buildNotificationRemoteViews(): RemoteViews {
+        val sourceLabel = formatNotificationLanguageLabel(notificationState.sourceLanguageCode)
+        val targetLabel = formatNotificationLanguageLabel(notificationState.targetLanguageCode)
+        val translatorLabel = formatNotificationKitLabel(notificationState.translationKitType)
+
+        return RemoteViews(packageName, R.layout.notification_translator_controls).apply {
+            setTextViewText(R.id.notification_title, getString(R.string.notification_translator_title))
+            setTextViewText(
+                R.id.notification_summary,
+                getString(R.string.notification_translator_summary_format, sourceLabel, translatorLabel, targetLabel)
+            )
+
+            setOnClickPendingIntent(R.id.notification_root, buildSettingsPendingIntent())
+            setOnClickPendingIntent(R.id.notification_settings_action, buildSettingsPendingIntent())
+            setOnClickPendingIntent(R.id.notification_stop_action, buildServicePendingIntent(REQUEST_CODE_SERVICE_STOP, EXTRA_SERVICE_STOP))
+        }
+    }
+
+    private fun formatNotificationLanguageLabel(languageCode: String): String {
+        if (languageCode.isBlank()) {
+            return "--"
+        }
+        return if (languageCode.equals("auto", ignoreCase = true)) {
+            getString(R.string.notification_translator_auto)
+        } else {
+            Language(languageCode).displayShortName
+        }
+    }
+
+    private fun formatNotificationKitLabel(kitType: TranslationKitType): String {
+        return when (kitType) {
+            TranslationKitType.GOOGLE -> "Google"
+            TranslationKitType.AZURE -> "Azure"
+            TranslationKitType.DEEPL -> "DeepL"
+            TranslationKitType.PAPAGO -> "Papago"
+        }
+    }
+
+    private fun buildSettingsPendingIntent(): PendingIntent {
+        return Intent(this, SettingsActivity::class.java).let { notificationIntent ->
+            PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
+        }
+    }
+
+    private fun buildServicePendingIntent(requestCode: Int, actionExtra: String): PendingIntent {
+        return PendingIntent.getService(
+            applicationContext,
+            requestCode,
+            Intent(applicationContext, OverlayService::class.java).apply {
+                putExtra(ACTION_SERVICE_CONTROL, actionExtra)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     private fun buildNotification(): Notification {
         // NotificationChannel 생성
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -357,34 +600,25 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
             }
         }
 
-        // SettingsActivity로 이동하기 위한 PendingIntent 생성
-        val settingsPendingIntent: PendingIntent =
-            Intent(this, SettingsActivity::class.java).let { notificationIntent ->
-                PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_IMMUTABLE)
-            }
+        val settingsPendingIntent = buildSettingsPendingIntent()
+        val notificationViews = buildNotificationRemoteViews()
 
-        // OverlayService를 실행하여 앱을 종료하는 PendingIntent 생성
-        val exitPendingIntent = PendingIntent.getService(
-            applicationContext,
-            REQUEST_CODE_SERVICE_STOP,
-            Intent(applicationContext, OverlayService::class.java).apply {
-                putExtra(ACTION_SERVICE_CONTROL, EXTRA_SERVICE_STOP)
-            },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        // Notification 생성
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID) // NotificationChannel을 사용하여 Notification 생성
-//            .setContentTitle(application.resources.getString(R.string.app_name)) // Notification의 제목 설정
-            .setContentText(application.resources.getString(R.string.notification_foreground_service))
-            .setSmallIcon(R.drawable.outline_translate_white_24) // Notification의 아이콘 설정
-            .setContentIntent(settingsPendingIntent) // Notification을 탭할 때 실행할 PendingIntent 설정
-            .addAction(
-                0,
-                application.resources.getString(R.string.service_menu_finish), // 'Exit' 액션 버튼
-                exitPendingIntent // 'Exit' 액션을 수행할 PendingIntent 설정
+        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+            .setContentTitle(getString(R.string.notification_translator_title))
+            .setContentText(
+                getString(
+                    R.string.notification_translator_summary_format,
+                    formatNotificationLanguageLabel(notificationState.sourceLanguageCode),
+                    formatNotificationKitLabel(notificationState.translationKitType),
+                    formatNotificationLanguageLabel(notificationState.targetLanguageCode)
+                )
             )
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE) // ForegroundService 동작 설정
+            .setSmallIcon(R.drawable.outline_translate_white_24)
+            .setContentIntent(settingsPendingIntent)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setCustomContentView(notificationViews)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 }
