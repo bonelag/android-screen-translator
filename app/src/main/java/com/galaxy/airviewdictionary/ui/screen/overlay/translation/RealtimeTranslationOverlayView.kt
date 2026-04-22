@@ -1,7 +1,5 @@
 package com.galaxy.airviewdictionary.ui.screen.overlay.translation
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Paint
 import android.graphics.PixelFormat
@@ -14,28 +12,14 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Reply
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,7 +28,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,7 +39,6 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,10 +58,7 @@ import com.galaxy.airviewdictionary.data.remote.translation.Transaction as Trans
 import com.galaxy.airviewdictionary.extensions.toPx
 import com.galaxy.airviewdictionary.ui.screen.overlay.OverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleViewModel
-import com.galaxy.airviewdictionary.ui.screen.reply.ReplyActivity
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import javax.inject.Singleton
 import kotlin.math.abs
 import kotlin.math.max
@@ -241,6 +220,7 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
                 if (translationState != null) {
                     selectDismissMonitorArmed = true
                 } else if (selectDismissMonitorArmed) {
+                    RealtimeSelectionActionView.INSTANCE.clear()
                     view?.post { clear() }
                 }
             }
@@ -267,11 +247,6 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
                         targetHandleViewModel.resumeDismissRunning()
                     }
                 },
-                onRerunDismissRunning = {
-                    if (currentPayload.mode == RealtimeOverlayMode.SELECT) {
-                        targetHandleViewModel.rerunDismissRunning()
-                    }
-                },
             )
         }
     }
@@ -286,11 +261,22 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
         payload: RealtimeTranslationOverlayPayload,
     ) {
         payloadFlow.value = payload
-        layoutParams = buildLayoutParams(applicationContext, payload.selectedArea)
+        val contentBounds = computeSelectedContentBounds(payload.visionTransaction, payload.selectedArea)
+            ?: Rect(payload.selectedArea)
+        layoutParams = buildLayoutParams(applicationContext, contentBounds)
         if (isAttachedToWindow()) {
             updateLayout(applicationContext)
         } else {
             super.cast(applicationContext)
+        }
+        if (payload.mode == RealtimeOverlayMode.SELECT) {
+            RealtimeSelectionActionView.INSTANCE.cast(
+                applicationContext = applicationContext,
+                translation = payload.translation,
+                anchorRect = contentBounds,
+            )
+        } else {
+            RealtimeSelectionActionView.INSTANCE.clear()
         }
         liveStateFlow.value = true
     }
@@ -298,6 +284,7 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
     override fun clear() {
         payloadFlow.value = null
         liveStateFlow.value = false
+        RealtimeSelectionActionView.INSTANCE.clear()
         super.clear()
     }
 
@@ -336,16 +323,7 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
         settings: RealtimeDisplaySettings,
         onPauseDismissRunning: () -> Unit,
         onResumeDismissRunning: () -> Unit,
-        onRerunDismissRunning: () -> Unit,
     ) {
-        val context = LocalContext.current
-        val isDarkMode by if (this@RealtimeTranslationOverlayView::targetHandleViewModel.isInitialized) {
-            targetHandleViewModel.preferenceRepository.uiDarkThemeFlow.collectAsState(initial = true)
-        } else {
-            remember { mutableStateOf(true) }
-        }
-        val coroutineScope = rememberCoroutineScope()
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -380,40 +358,6 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
                             translationTransparency = settings.translationTransparency,
                         )
                     }
-                }
-
-                if (payload.mode == RealtimeOverlayMode.SELECT) {
-                    SelectionActionStrip(
-                        isDarkMode = isDarkMode,
-                        onCopy = {
-                            onRerunDismissRunning()
-                            copyTranslationToClipboard(context, payload.translation)
-                        },
-                        onReply = {
-                            onRerunDismissRunning()
-                            coroutineScope.launch {
-                                delay(300L)
-                                ReplyActivity.start(
-                                    context = context,
-                                    translationResultText = payload.translation.resultText.orEmpty(),
-                                    detectedLanguageCode = payload.translation.detectedLanguageCode,
-                                    targetLanguageCode = payload.translation.targetLanguageCode
-                                )
-                                clear()
-                            }
-                        },
-                        onTts = {
-                            onRerunDismissRunning()
-                            targetHandleViewModel.playTTS(
-                                payload.translation.resultText.orEmpty(),
-                                payload.translation.targetLanguageCode ?: "en"
-                            )
-                        },
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(6.dp)
-                            .zIndex(2f)
-                    )
                 }
             }
         }
@@ -472,98 +416,6 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
         }
     }
 
-    @Composable
-    private fun SelectionActionStrip(
-        isDarkMode: Boolean,
-        onCopy: () -> Unit,
-        onReply: () -> Unit,
-        onTts: () -> Unit,
-        modifier: Modifier = Modifier,
-    ) {
-        val containerColor = if (isDarkMode) {
-            colorResource(R.color.settings_card_dark).copy(alpha = 0.94f)
-        } else {
-            colorResource(R.color.settings_card_light).copy(alpha = 0.96f)
-        }
-        val borderColor = if (isDarkMode) {
-            colorResource(R.color.settings_border_dark)
-        } else {
-            colorResource(R.color.settings_border_light)
-        }
-        val iconTint = if (isDarkMode) {
-            colorResource(R.color.settings_text_primary_dark)
-        } else {
-            colorResource(R.color.settings_text_primary_light)
-        }
-
-        Surface(
-            modifier = modifier,
-            color = containerColor,
-            shape = RoundedCornerShape(16.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, borderColor.copy(alpha = 0.75f))
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RealtimeActionIcon(
-                    imageVector = Icons.Default.ContentCopy,
-                    contentDescription = "Copy translation",
-                    tint = iconTint,
-                    onClick = onCopy
-                )
-                RealtimeActionIcon(
-                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                    contentDescription = "Read translation aloud",
-                    tint = iconTint,
-                    onClick = onTts
-                )
-                RealtimeActionIcon(
-                    imageVector = Icons.Default.Reply,
-                    contentDescription = "Reply",
-                    tint = iconTint,
-                    onClick = onReply
-                )
-            }
-        }
-    }
-
-    @Composable
-    private fun RealtimeActionIcon(
-        imageVector: androidx.compose.ui.graphics.vector.ImageVector,
-        contentDescription: String,
-        tint: Color,
-        onClick: () -> Unit,
-    ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier
-                .padding(1.dp)
-                .border(0.dp, Color.Transparent, CircleShape)
-        ) {
-            Icon(
-                imageVector = imageVector,
-                contentDescription = contentDescription,
-                tint = tint
-            )
-        }
-    }
-
-    private fun copyTranslationToClipboard(
-        context: Context,
-        translation: TranslationTransaction,
-    ) {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val sourceText = translation.correctedText ?: translation.sourceText.orEmpty()
-        val resultText = translation.resultText.orEmpty()
-        val clip = ClipData.newPlainText(
-            "Translated Text",
-            "$sourceText  $resultText".trim()
-        )
-        clipboard.setPrimaryClip(clip)
-    }
-
     private fun buildParagraphOverlayInstructions(
         context: Context,
         payload: RealtimeTranslationOverlayPayload,
@@ -576,12 +428,17 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
 
         val paragraphs = payload.visionTransaction.paragraphs
             .mapNotNull { paragraph ->
-                intersectRect(paragraph.boundingBox, payload.selectedArea)?.let { boundedRect ->
-                    if (boundedRect.width() > 6 && boundedRect.height() > 6) {
-                        paragraph to boundedRect
-                    } else {
-                        null
+                val selectedLines = paragraph.lines.filter { Rect.intersects(it.boundingBox, payload.selectedArea) }
+                val boundedRect = when {
+                    payload.mode == RealtimeOverlayMode.SELECT && selectedLines.isNotEmpty() -> {
+                        unionRects(selectedLines.map { it.boundingBox })
                     }
+
+                    else -> intersectRect(paragraph.boundingBox, payload.selectedArea)
+                }
+
+                boundedRect?.takeIf { it.width() > 6 && it.height() > 6 }?.let {
+                    Triple(paragraph, selectedLines.ifEmpty { paragraph.lines }, it)
                 }
             }
 
@@ -595,23 +452,23 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
         val preserveWordBoundaries = !Language.isNonSpacingLanguage(targetLanguageCode)
         val paragraphTexts = splitTextByRatios(
             text = translatedText,
-            weights = paragraphs.map { (_, rect) -> rect.width() * max(1, rect.height()) },
+            weights = paragraphs.map { (_, _, rect) -> rect.width() * max(1, rect.height()) },
             preserveWordBoundaries = preserveWordBoundaries,
         )
 
-        return paragraphs.mapIndexedNotNull { index, (paragraph, paragraphRect) ->
+        return paragraphs.mapIndexedNotNull { index, (paragraph, selectedLines, paragraphRect) ->
             val paragraphText = paragraphTexts.getOrElse(index) { "" }.trim()
             if (paragraphText.isBlank()) {
                 return@mapIndexedNotNull null
             }
 
             val lineTexts = buildParagraphDisplayLines(
-                paragraph = paragraph,
+                sourceLines = selectedLines,
                 paragraphText = paragraphText,
                 preserveWordBoundaries = preserveWordBoundaries,
             )
-            val dominantLine = paragraph.lines.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
-                ?: paragraph.lines.firstOrNull()
+            val dominantLine = selectedLines.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() }
+                ?: selectedLines.firstOrNull()
                 ?: return@mapIndexedNotNull null
 
             val (resolvedTextColor, resolvedBackgroundColor) = resolveColors(
@@ -645,7 +502,7 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
     }
 
     private fun buildParagraphDisplayLines(
-        paragraph: Paragraph,
+        sourceLines: List<Line>,
         paragraphText: String,
         preserveWordBoundaries: Boolean,
     ): List<String> {
@@ -653,13 +510,13 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
             .lines()
             .map { it.trim() }
             .filter { it.isNotBlank() }
-        if (explicitLines.size == paragraph.lines.size) {
+        if (explicitLines.size == sourceLines.size) {
             return explicitLines
         }
 
         return splitTextByRatios(
             text = paragraphText,
-            weights = paragraph.lines.map { line ->
+            weights = sourceLines.map { line ->
                 max(1, line.representation.trim().length)
             },
             preserveWordBoundaries = preserveWordBoundaries,
@@ -828,5 +685,16 @@ class RealtimeTranslationOverlayView private constructor() : OverlayView() {
     private fun intersectRect(source: Rect, target: Rect): Rect? {
         val result = Rect(source)
         return if (result.intersect(target)) result else null
+    }
+
+    private fun unionRects(rects: List<Rect>): Rect? {
+        return rects.reduceOrNull { acc, rect ->
+            Rect(
+                minOf(acc.left, rect.left),
+                minOf(acc.top, rect.top),
+                maxOf(acc.right, rect.right),
+                maxOf(acc.bottom, rect.bottom),
+            )
+        }
     }
 }

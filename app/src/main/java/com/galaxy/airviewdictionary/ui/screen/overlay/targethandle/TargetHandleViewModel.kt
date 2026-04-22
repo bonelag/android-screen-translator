@@ -55,16 +55,16 @@ import com.galaxy.airviewdictionary.extensions.openGoogleApp
 import com.galaxy.airviewdictionary.extensions.toPx
 import com.galaxy.airviewdictionary.ui.screen.overlay.dialog.DialogView
 import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.MenuBarView
+import com.galaxy.airviewdictionary.ui.screen.overlay.selection.AreaSelectionView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.DismissRunningCommand
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeOverlayMode
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayPayload
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.TTSStatus
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.TranslationView
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.extractSelectionWord
 import com.galaxy.airviewdictionary.ui.screen.overlay.visiontext.VisionTextView
 import com.galaxy.airviewdictionary.ui.screen.permissions.ScreenCapturePermissionRequesterActivity
-import getAverageTextBlockHeight
-import getBoundingBoxUnion
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -803,19 +803,8 @@ class TargetHandleViewModel(
         textDetectMode: TextDetectMode,
     ): VisionText? {
         if (textDetectMode == TextDetectMode.SELECT) {
-            val boundingBox = visionResult.text.getBoundingBoxUnion()
-            val averageTextBlockHeight = visionResult.text.getAverageTextBlockHeight()
-            val writingDirection = visionResult.mostFrequentWritingDirection()
-            if (boundingBox != null && averageTextBlockHeight > 0 && writingDirection != null) {
-                return Word(
-                    boundingBox = boundingBox,
-                    representation = visionResult.text.text,
-                    writingDirection = writingDirection,
-                    chars = emptyList(),
-                    presetFontHeight = averageTextBlockHeight
-                )
-            }
-            return null
+            val selectedArea = selectedAreaFlow.value ?: return null
+            return extractSelectionWord(visionResult, selectedArea)
         }
 
         val positionedParagraph: Paragraph? = visionResult.paragraphs.find { paragraph ->
@@ -899,7 +888,11 @@ class TargetHandleViewModel(
                             Timber.tag(TAG).d("correctionKitType $correctionKitType")
                             Timber.tag(TAG).d("textDetectMode $textDetectMode")
                             Timber.tag(TAG).d("translationKitType $translationKitType")
-                            if (useCorrectionKit && textDetectMode != TextDetectMode.WORD && translationKitType != TranslationKitType.DEEPL) {
+                            if (useCorrectionKit &&
+                                textDetectMode != TextDetectMode.WORD &&
+                                textDetectMode != TextDetectMode.SELECT &&
+                                translationKitType != TranslationKitType.DEEPL
+                            ) {
                                 correctedText = correctionRepository.request(
                                     sourceLanguageCode = visionResultTransaction.detectedLanguageCode,
                                     sourceText = pointerPositionedVisionText.representation,
@@ -941,6 +934,7 @@ class TargetHandleViewModel(
                                                     if (textDetectMode == TextDetectMode.SELECT) {
                                                         val selectedArea = selectedAreaFlow.value
                                                         if (selectedArea != null) {
+                                                            AreaSelectionView.INSTANCE.setWindowVisible(false)
                                                             RealtimeTranslationOverlayView.INSTANCE.cast(
                                                                 applicationContext,
                                                                 RealtimeTranslationOverlayPayload(

@@ -10,7 +10,6 @@ import timber.log.Timber
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
-import kotlin.properties.Delegates
 
 
 /**
@@ -87,9 +86,9 @@ data class Line(
         words.add(left, newWord)
     }
 
-    var fontColor by Delegates.notNull<Int>()
+    var fontColor: Int = Color.BLACK
 
-    var backgroundColor by Delegates.notNull<Int>()
+    var backgroundColor: Int = Color.WHITE
 
     /**
      * 폰트 색상과 백그라운드 색상을 알아냄

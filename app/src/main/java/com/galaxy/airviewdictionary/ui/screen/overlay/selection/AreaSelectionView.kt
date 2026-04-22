@@ -39,15 +39,21 @@ import com.galaxy.airviewdictionary.data.local.capture.NoMediaProjectionTokenExc
 import com.galaxy.airviewdictionary.data.local.vision.TextDetectMode
 import com.galaxy.airviewdictionary.data.local.vision.WritingDirection
 import com.galaxy.airviewdictionary.extensions.setFromPoints
+import com.galaxy.airviewdictionary.extensions.toPx
 import com.galaxy.airviewdictionary.extensions.vibrate
 import com.galaxy.airviewdictionary.data.remote.translation.Language
 import com.galaxy.airviewdictionary.data.local.capture.CaptureResponse
 import com.galaxy.airviewdictionary.data.local.vision.model.VisionResponse
 import com.galaxy.airviewdictionary.ui.screen.overlay.OverlayView
+import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.MenuBarView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleViewModel
+import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TranslateStatus
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeSelectionActionView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.TranslationView
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.createSelectionCapture
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.offsetVisionTransactionToScreen
 import com.galaxy.airviewdictionary.ui.screen.permissions.ScreenCapturePermissionRequesterActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
@@ -86,12 +92,8 @@ open class AreaSelectionView : OverlayView() {
         val stoppedDistancePx = with(resources.displayMetrics) {
             resources.getDimensionPixelSize(R.dimen.targethandle_view_pointer_stopped_distance)
         }
-        val selectionMinWidthPx = with(resources.displayMetrics) {
-            resources.getDimensionPixelSize(R.dimen.area_selection_min_width)
-        }
-        val selectionMinHeightPx = with(resources.displayMetrics) {
-            resources.getDimensionPixelSize(R.dimen.area_selection_min_height)
-        }
+        val selectionMinWidthPx = max(6.dp.toPx(context), 1)
+        val selectionMinHeightPx = max(6.dp.toPx(context), 1)
 
         val textDetectMode by targetHandleViewModel.preferenceRepository.textDetectModeFlow.collectAsStateWithLifecycle(
             lifecycle = lifecycleOwner.lifecycle,
@@ -324,6 +326,7 @@ open class AreaSelectionView : OverlayView() {
             gravity = Gravity.TOP or Gravity.START
         }
         super.cast(applicationContext)
+        setWindowVisible(true)
         targetHandleViewModel.areaSelectingStateFlow.value = true
     }
 
@@ -338,44 +341,74 @@ open class AreaSelectionView : OverlayView() {
     private fun requestTranslate(context: Context, selectedArea: Rect) {
         translateJob?.cancel()
         translateJob = launchInOverlayViewCoroutineScope {
-            // 캡처 이미지
-            val captureResponse: CaptureResponse = targetHandleViewModel.captureRepository.request()
-            Timber.tag(TAG).d("captureResponse $captureResponse")
-            if (captureResponse !is CaptureResponse.Success) {
-                Timber.tag(TAG).d("CaptureResponse.Error ${(captureResponse as CaptureResponse.Error).t}")
-                if (captureResponse.t is NoMediaProjectionTokenException) {
-                    // 화면 캡처 권한을 요청
-                    val intent = Intent(context, ScreenCapturePermissionRequesterActivity::class.java)
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
-                    clear()
-                } else if (captureResponse.t is CapturePreventedException) {
-                    // 캡처 방지 알림
-                    // Timber.tag(TAG).e("CapturePreventedException: 캡처 방지 알림")
-                    // captureResponse.t.checkerBitmap 처리
-                }
-                return@launchInOverlayViewCoroutineScope
-            }
-
-            // 영역선택 이미지
-            val selectedAreaBitmap = createOverlaidBitmap(captureResponse.bitmap, selectedArea)
-
-            // Test 캡처 이미지 확인
-//                    TestCapturedActivity.start(context, selectedAreaBitmap)
-
-            val sourceLanguageCode: String = targetHandleViewModel.preferenceRepository.sourceLanguageCodeFlow.first()
-            val visionResponse: VisionResponse = targetHandleViewModel.visionRepository.request(
-                bitmap = selectedAreaBitmap,
-                sourceLanguageCode = sourceLanguageCode,
+            var shouldRestoreSelectionView = true
+            val overlaysToHide = listOf(
+                this@AreaSelectionView,
+                MenuBarView.INSTANCE,
+                TargetHandleView.INSTANCE,
+                TranslationView.INSTANCE,
+                RealtimeTranslationOverlayView.INSTANCE,
+                RealtimeSelectionActionView.INSTANCE,
             )
-            Timber.tag(TAG).d("$selectedArea sourceLanguageCode $sourceLanguageCode")
-            Timber.tag(TAG).d("$selectedArea visionResponse $visionResponse")
+            // 캡처 이미지
+            try {
+                overlaysToHide.forEach { overlay ->
+                    runCatching { overlay.setWindowVisible(false) }
+                }
+                kotlinx.coroutines.delay(32)
 
-            if (visionResponse !is VisionResponse.Success) {
-                return@launchInOverlayViewCoroutineScope
+                val captureResponse: CaptureResponse = targetHandleViewModel.captureRepository.request()
+                Timber.tag(TAG).d("captureResponse $captureResponse")
+                if (captureResponse !is CaptureResponse.Success) {
+                    Timber.tag(TAG).d("CaptureResponse.Error ${(captureResponse as CaptureResponse.Error).t}")
+                    if (captureResponse.t is NoMediaProjectionTokenException) {
+                        // 화면 캡처 권한을 요청
+                        val intent = Intent(context, ScreenCapturePermissionRequesterActivity::class.java)
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                        clear()
+                    } else if (captureResponse.t is CapturePreventedException) {
+                        // 캡처 방지 알림
+                        // captureResponse.t.checkerBitmap 처리
+                    }
+                    return@launchInOverlayViewCoroutineScope
+                }
+
+                val selectionCapture = createSelectionCapture(
+                    originalBitmap = captureResponse.bitmap,
+                    selectionRect = selectedArea,
+                    paddingPx = 18.dp.toPx(context),
+                    minimumEdgePx = 88.dp.toPx(context),
+                )
+
+                val sourceLanguageCode: String = targetHandleViewModel.preferenceRepository.sourceLanguageCodeFlow.first()
+                val visionResponse: VisionResponse = targetHandleViewModel.visionRepository.request(
+                    bitmap = selectionCapture.bitmap,
+                    sourceLanguageCode = sourceLanguageCode,
+                )
+                Timber.tag(TAG).d("$selectedArea sourceLanguageCode $sourceLanguageCode")
+                Timber.tag(TAG).d("$selectedArea visionResponse $visionResponse")
+
+                if (visionResponse !is VisionResponse.Success) {
+                    return@launchInOverlayViewCoroutineScope
+                }
+
+                shouldRestoreSelectionView = false
+                targetHandleViewModel.visionResultFlow.value = offsetVisionTransactionToScreen(
+                    transaction = visionResponse.result,
+                    offsetX = selectionCapture.sourceRect.left,
+                    offsetY = selectionCapture.sourceRect.top,
+                )
+            } finally {
+                runCatching { MenuBarView.INSTANCE.setWindowVisible(true) }
+                runCatching { TargetHandleView.INSTANCE.setWindowVisible(true) }
+                runCatching { TranslationView.INSTANCE.setWindowVisible(true) }
+                runCatching { RealtimeTranslationOverlayView.INSTANCE.setWindowVisible(true) }
+                runCatching { RealtimeSelectionActionView.INSTANCE.setWindowVisible(true) }
+                if (shouldRestoreSelectionView) {
+                    runCatching { this@AreaSelectionView.setWindowVisible(true) }
+                }
             }
-
-            targetHandleViewModel.visionResultFlow.value = visionResponse.result
         }
     }
 }

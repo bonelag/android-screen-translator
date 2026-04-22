@@ -54,17 +54,22 @@ import com.galaxy.airviewdictionary.data.remote.translation.TranslationKitType
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationResponse
 import com.galaxy.airviewdictionary.extensions.isNetworkAvailable
 import com.galaxy.airviewdictionary.extensions.setFromPoints
+import com.galaxy.airviewdictionary.extensions.toPx
 import com.galaxy.airviewdictionary.extensions.vibrate
 import com.galaxy.airviewdictionary.ui.screen.main.SettingsActivity
 import com.galaxy.airviewdictionary.ui.screen.overlay.Event
 import com.galaxy.airviewdictionary.ui.screen.overlay.OverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.dialog.DialogView
-import com.galaxy.airviewdictionary.ui.screen.overlay.selection.createOverlaidBitmap
+import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.MenuBarView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleViewModel
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeOverlayMode
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeSelectionActionView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayPayload
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayView
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.createSelectionCapture
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.extractSelectionText
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.offsetVisionTransactionToScreen
 import com.galaxy.airviewdictionary.ui.screen.permissions.ScreenCapturePermissionRequesterActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -461,42 +466,65 @@ open class FixedAreaView : OverlayView() {
     private var detectedString = ""
 
     private suspend fun requestVision(context: Context, selectedArea: Rect) {
-        // 캡처 이미지
-        val captureResponse: CaptureResponse = targetHandleViewModel.captureRepository.request()
-        Timber.tag(TAG).d("captureResponse $captureResponse")
-        if (captureResponse !is CaptureResponse.Success) {
-            Timber.tag(TAG).d("CaptureResponse.Error ${(captureResponse as CaptureResponse.Error).t}")
-            if (captureResponse.t is NoMediaProjectionTokenException) {
-                // 화면 캡처 권한을 요청
-                val intent = Intent(context, ScreenCapturePermissionRequesterActivity::class.java)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                clear()
-            } else if (captureResponse.t is CapturePreventedException) {
-                // 캡처 방지 알림
-                // Timber.tag(TAG).e("CapturePreventedException: 캡처 방지 알림")
-                // captureResponse.t.checkerBitmap 처리
-            }
-            return
-        }
-
-        // 영역선택 이미지
-        val selectedAreaBitmap = createOverlaidBitmap(captureResponse.bitmap, selectedArea)
-
-        // Test 캡처 이미지 확인
-        // TestCapturedActivity.start(context, selectedAreaBitmap)
-
-        val sourceLanguageCode: String = targetHandleViewModel.preferenceRepository.sourceLanguageCodeFlow.first()
-        val visionResponse: VisionResponse = targetHandleViewModel.visionRepository.request(
-            bitmap = selectedAreaBitmap,
-            sourceLanguageCode = sourceLanguageCode,
+        val overlaysToHide = listOf(
+            MenuBarView.INSTANCE,
+            TargetHandleView.INSTANCE,
+            RealtimeTranslationOverlayView.INSTANCE,
+            RealtimeSelectionActionView.INSTANCE,
+            FixedAreaTranslationView.INSTANCE,
+            this@FixedAreaView,
         )
+        val screenTransaction = try {
+            overlaysToHide.forEach { overlay ->
+                runCatching { overlay.setWindowVisible(false) }
+            }
+            delay(32)
 
-        if (visionResponse !is VisionResponse.Success) {
-            return
+            val captureResponse: CaptureResponse = targetHandleViewModel.captureRepository.request()
+            Timber.tag(TAG).d("captureResponse $captureResponse")
+            if (captureResponse !is CaptureResponse.Success) {
+                Timber.tag(TAG).d("CaptureResponse.Error ${(captureResponse as CaptureResponse.Error).t}")
+                if (captureResponse.t is NoMediaProjectionTokenException) {
+                    // 화면 캡처 권한을 요청
+                    val intent = Intent(context, ScreenCapturePermissionRequesterActivity::class.java)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    clear()
+                } else if (captureResponse.t is CapturePreventedException) {
+                    // captureResponse.t.checkerBitmap 처리
+                }
+                return
+            }
+
+            val selectionCapture = createSelectionCapture(
+                originalBitmap = captureResponse.bitmap,
+                selectionRect = selectedArea,
+                paddingPx = 18.dp.toPx(context),
+                minimumEdgePx = 96.dp.toPx(context),
+            )
+
+            val sourceLanguageCode: String = targetHandleViewModel.preferenceRepository.sourceLanguageCodeFlow.first()
+            val visionResponse: VisionResponse = targetHandleViewModel.visionRepository.request(
+                bitmap = selectionCapture.bitmap,
+                sourceLanguageCode = sourceLanguageCode,
+            )
+
+            if (visionResponse !is VisionResponse.Success) {
+                return
+            }
+
+            offsetVisionTransactionToScreen(
+                transaction = visionResponse.result,
+                offsetX = selectionCapture.sourceRect.left,
+                offsetY = selectionCapture.sourceRect.top,
+            )
+        } finally {
+            overlaysToHide.forEach { overlay ->
+                runCatching { overlay.setWindowVisible(true) }
+            }
         }
 
-        val visionResponseString = visionResponse.result.text.text.replace("\n", " ")
+        val visionResponseString = extractSelectionText(screenTransaction, selectedArea).replace("\n", " ")
 //        Timber.tag(TAG).d("[visionResponseString] [$visionResponseString]")
         if (detectedString == visionResponseString) {
             return
@@ -504,7 +532,7 @@ open class FixedAreaView : OverlayView() {
 
         detectedString = visionResponseString
         Timber.tag(TAG).d("[detectedString] $detectedString")
-        requestTranslate(visionResponse.result, detectedString)
+        requestTranslate(screenTransaction, detectedString)
     }
 
     private suspend fun requestTranslate(visionResult: Transaction, sourceText: String) {

@@ -216,6 +216,12 @@ abstract class OverlayView : OverlayServiceEventListener {
         updateLayout(context)
     }
 
+    suspend fun setWindowVisible(visible: Boolean) {
+        withContext(Dispatchers.Main.immediate) {
+            view?.visibility = if (visible) View.VISIBLE else View.INVISIBLE
+        }
+    }
+
     protected fun launchInAVDCoroutineScope(block: suspend CoroutineScope.() -> Unit): Job {
         return avdCoroutineScope.launch(block = block)
     }
