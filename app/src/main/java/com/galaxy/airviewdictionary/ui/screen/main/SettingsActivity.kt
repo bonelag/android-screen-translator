@@ -53,7 +53,6 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FiberNew
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VoiceChat
 import androidx.compose.material.icons.filled.Home
@@ -170,6 +169,7 @@ import timber.log.Timber
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.math.round
 import kotlin.math.roundToInt
 
@@ -853,37 +853,6 @@ class SettingsActivity : AVDActivity() {
                                 tint = accentColor
                             )
                         }
-
-                        SettingsTopBarActionButton(
-                            onClick = {
-                                viewModel.analyticsRepository.settingsReport(
-                                    dockDelay = dockingDelay.toString(),
-                                    haptic = dragHandleHaptic.toString(),
-                                    menuTransparency = (menuBarTransparency * 100).roundToInt().toString(),
-                                    menuComposition = menuBarConfig.name,
-                                    transTransparency = (translationTransparency * 100).roundToInt().toString(),
-                                    closeDelay = translationCloseDelay.toString(),
-                                    replyTransparency = (replyTransparency * 100).roundToInt().toString(),
-                                    correctionKit = if (useCorrectionKit) correctionKit.name else "none",
-                                    autoTTS = automaticTranslationPlayback.toString(),
-                                    TTSVoice = ttsSelectedVoice?.name ?: "unknown",
-                                    TTSRate = BigDecimal(ttsSpeechRate.toDouble()).setScale(1, RoundingMode.HALF_UP).toString(),
-                                )
-
-                                if (screenTranslatorRunning) {
-                                    stopScreenTranslator()
-                                } else {
-                                    requestScreenCaptureAndStart()
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PowerSettingsNew,
-                                contentDescription = if (screenTranslatorRunning) "Stop translation" else "Start translation",
-                                modifier = Modifier.size(18.dp),
-                                tint = if (screenTranslatorRunning) colorResource(R.color.settings_success) else subContentColor
-                            )
-                        }
                     }
                     HorizontalDivider(color = dividerColor, thickness = 1.dp)
                 }
@@ -902,7 +871,9 @@ class SettingsActivity : AVDActivity() {
                             val endPadding = paddingValues.calculateRightPadding(layoutDirection).toPx(context)
                             val posX = (endPadding - startPadding) / 2
                             val topPadding = paddingValues.calculateTopPadding().toPx(context)
-                            val posY = center.y.toInt() - topPadding - (if (isPortrait) 0.dp else 12.dp).toPx(context)
+                            val rawPosY = center.y.toInt() - topPadding - (if (isPortrait) 0.dp else 12.dp).toPx(context)
+                            val minTopMargin = 28.dp.toPx(context)
+                            val posY = max(rawPosY, minTopMargin)
                             menuBarViewSettlePositionFlow.value = Point(posX, posY)
                         }
                 )
