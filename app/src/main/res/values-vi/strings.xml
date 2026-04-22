@@ -1,19 +1,19 @@
 <resources>
-  <string name="app_name">Trình Dịch Màn Hình</string>
+  <string name="app_name">VTranslator</string>
 
   <!-- Notification Permission -->
   <string name="message_permission_notification">Yêu cầu quyền:\nThông báo</string>
-  <string name="message_permission_notification_detail">Để khởi chạy Trình Dịch Màn Hình, bạn cần cấp quyền thông báo.</string>
+  <string name="message_permission_notification_detail">Để khởi chạy VTranslator, bạn cần cấp quyền thông báo.</string>
 
   <!-- Overlay Permission -->
   <string name="message_permission_overlay">Yêu cầu quyền:\nHiển thị trên ứng dụng khác</string>
-  <string name="message_permission_overlay_detail">Để khởi chạy Trình Dịch Màn Hình, bạn cần cấp quyền hiển thị trên ứng dụng khác.</string>
+  <string name="message_permission_overlay_detail">Để khởi chạy VTranslator, bạn cần cấp quyền hiển thị trên ứng dụng khác.</string>
   <string name="message_permission_overlay_denied">Đã từ chối quyền hiển thị lớp phủ</string>
   <string name="message_permission_overlay_denied_detail">Chưa được cấp quyền hiển thị lớp phủ.\nỨng dụng sẽ thoát.</string>
 
   <!-- MediaProjection token -->
   <string name="message_media_projection">Yêu cầu quyền:\nGhi màn hình</string>
-  <string name="message_media_projection_detail">Để khởi chạy Trình Dịch Màn Hình, bạn cần cấp quyền ghi màn hình.\n\nThông tin trên màn hình chỉ được sử dụng để dịch và sẽ không được lưu trữ hay chia sẻ bên ngoài.</string>
+  <string name="message_media_projection_detail">Để khởi chạy VTranslator, bạn cần cấp quyền ghi màn hình.\n\nThông tin trên màn hình chỉ được sử dụng để dịch và sẽ không được lưu trữ hay chia sẻ bên ngoài.</string>
   <string name="message_media_projection_denied">Đã từ chối quyền ghi màn hình</string>
   <string name="message_media_projection_denied_detail">Không được cấp quyền ghi màn hình.\nỨng dụng sẽ thoát.</string>
 
