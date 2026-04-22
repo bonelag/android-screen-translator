@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.SignalWifiStatusbarConnectedNoInternet4
 import androidx.compose.material.icons.outlined.PlayCircleOutline
@@ -63,6 +62,9 @@ import com.galaxy.airviewdictionary.ui.screen.overlay.dialog.DialogView
 import com.galaxy.airviewdictionary.ui.screen.overlay.selection.createOverlaidBitmap
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleViewModel
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeOverlayMode
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayPayload
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayView
 import com.galaxy.airviewdictionary.ui.screen.permissions.ScreenCapturePermissionRequesterActivity
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -172,6 +174,7 @@ open class FixedAreaView : OverlayView() {
 
         // 영역선택 시작
         fun startSelection() {
+            RealtimeTranslationOverlayView.INSTANCE.clear()
             FixedAreaTranslationView.INSTANCE.clear()
             fixedAreaViewStateFlowJob?.cancel()
             fixedAreaViewStateFlow.value = State.Idle
@@ -342,7 +345,6 @@ open class FixedAreaView : OverlayView() {
                                     startFixedAreaTranslate(context, selectedArea.value)
                                     launchInOverlayViewCoroutineScope {
                                         TargetHandleView.INSTANCE.cast(context, true)
-                                        FixedAreaTranslationView.INSTANCE.cast(context, selectedArea.value)
                                     }
 
                                     fixedAreaViewBackgroundAlphaJob?.cancel()
@@ -354,19 +356,7 @@ open class FixedAreaView : OverlayView() {
                                     }
                                 }
 
-                                launchInOverlayViewCoroutineScope {
-                                    DialogView.INSTANCE.cast(
-                                        applicationContext = context,
-                                        icon = Icons.Default.BatteryAlert,
-                                        dialogTitle = context.getString(R.string.message_translate_fixedarea_warn),
-                                        dialogText = context.getString(R.string.message_translate_fixedarea_warn_detail),
-                                        onConfirm = {
-                                            launchInOverlayViewCoroutineScope {
-                                                start()
-                                            }
-                                        }
-                                    )
-                                }
+                                start()
                             } else {
                                 launchInOverlayViewCoroutineScope {
                                     DialogView.INSTANCE.cast(
@@ -442,6 +432,7 @@ open class FixedAreaView : OverlayView() {
     }
 
     override fun clear() {
+        RealtimeTranslationOverlayView.INSTANCE.clear()
         FixedAreaTranslationView.INSTANCE.clear()
         fixedAreaViewBackgroundAlphaJob?.cancel()
         fixedAreaViewBackgroundAlphaJob = null
@@ -523,6 +514,7 @@ open class FixedAreaView : OverlayView() {
 
         if (sourceText.trim().isEmpty()) {
             translationFlow.value = ""
+            RealtimeTranslationOverlayView.INSTANCE.clear()
         } else {
             targetHandleViewModel.translationRepository.request(
                 translationKitType = translationKitType,
@@ -545,6 +537,28 @@ open class FixedAreaView : OverlayView() {
                         )
                         Timber.tag(TAG).d("===== $translationKitType ${it.result.resultText}")
                         translationFlow.value = it.result.resultText ?: ""
+                        val overlayArea = visionResult.paragraphs
+                            .map { it.boundingBox }
+                            .reduceOrNull { acc, rect ->
+                                Rect(
+                                    minOf(acc.left, rect.left),
+                                    minOf(acc.top, rect.top),
+                                    maxOf(acc.right, rect.right),
+                                    maxOf(acc.bottom, rect.bottom)
+                                )
+                            }
+                            ?: Rect()
+                        if (!overlayArea.isEmpty) {
+                            RealtimeTranslationOverlayView.INSTANCE.cast(
+                                overlayService.applicationContext,
+                                RealtimeTranslationOverlayPayload(
+                                    mode = RealtimeOverlayMode.FIXED_AREA,
+                                    selectedArea = overlayArea,
+                                    visionTransaction = visionResult,
+                                    translation = transaction,
+                                )
+                            )
+                        }
                     }
 
                     is TranslationResponse.Error -> {

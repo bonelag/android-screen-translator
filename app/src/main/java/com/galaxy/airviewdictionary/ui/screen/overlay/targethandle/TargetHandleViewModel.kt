@@ -56,6 +56,9 @@ import com.galaxy.airviewdictionary.extensions.toPx
 import com.galaxy.airviewdictionary.ui.screen.overlay.dialog.DialogView
 import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.MenuBarView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.DismissRunningCommand
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeOverlayMode
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayPayload
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.TTSStatus
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.TranslationView
 import com.galaxy.airviewdictionary.ui.screen.overlay.visiontext.VisionTextView
@@ -145,6 +148,11 @@ class TargetHandleViewModel(
      * target handle pointer 위치 Flow
      */
     val pointerPositionFlow = MutableStateFlow<Point?>(null)
+
+    /**
+     * SELECT 모드에서 사용자가 지정한 영역.
+     */
+    val selectedAreaFlow = MutableStateFlow<Rect?>(null)
 
     /**
      * target handle 이 docking 되었는지의 여부 flow
@@ -867,7 +875,9 @@ class TargetHandleViewModel(
                 }
                 .filterNotNull()
                 .collect { pointerPositionedVisionText ->
-                    VisionTextView.INSTANCE.cast(applicationContext, pointerPositionedVisionText)
+                    if (textDetectMode != TextDetectMode.SELECT) {
+                        VisionTextView.INSTANCE.cast(applicationContext, pointerPositionedVisionText)
+                    }
 
                     visionResultFlow.value?.let { visionResultTransaction ->
                         val translationKitType: TranslationKitType = preferenceRepository.translationKitTypeFlow.first()
@@ -927,12 +937,27 @@ class TargetHandleViewModel(
                                                     )
                                                     Timber.tag(TAG).d("translationRepository Translated transaction $transaction")
 
-                                                    TranslationView.INSTANCE.cast(
-                                                        applicationContext,
-                                                        transaction,
-                                                        pointerPositionedVisionText
-                                                    )
                                                     pointerPositionedTranslationFlow.value = transaction
+                                                    if (textDetectMode == TextDetectMode.SELECT) {
+                                                        val selectedArea = selectedAreaFlow.value
+                                                        if (selectedArea != null) {
+                                                            RealtimeTranslationOverlayView.INSTANCE.cast(
+                                                                applicationContext,
+                                                                RealtimeTranslationOverlayPayload(
+                                                                    mode = RealtimeOverlayMode.SELECT,
+                                                                    selectedArea = Rect(selectedArea),
+                                                                    visionTransaction = visionResultTransaction,
+                                                                    translation = transaction,
+                                                                )
+                                                            )
+                                                        }
+                                                    } else {
+                                                        TranslationView.INSTANCE.cast(
+                                                            applicationContext,
+                                                            transaction,
+                                                            pointerPositionedVisionText
+                                                        )
+                                                    }
                                                 }
 
                                                 is TranslationResponse.Error -> {

@@ -114,6 +114,34 @@ class SettingsViewModel @Inject constructor(
         preferenceRepository.update(PreferenceRepository.TRANSLATION_CLOSE_DELAY, translationCloseDelay)
     }
 
+    fun updateRealtimeTranslationTransparentBackground(enabled: Boolean) {
+        preferenceRepository.update(PreferenceRepository.REALTIME_TRANSLATION_TRANSPARENT_BACKGROUND, enabled)
+    }
+
+    fun updateRealtimeTranslationSmartBackground(enabled: Boolean) {
+        preferenceRepository.update(PreferenceRepository.REALTIME_TRANSLATION_SMART_BACKGROUND, enabled)
+    }
+
+    fun updateRealtimeTranslationTextColor(colorArgb: Int) {
+        preferenceRepository.update(PreferenceRepository.REALTIME_TRANSLATION_TEXT_COLOR, colorArgb)
+    }
+
+    fun updateRealtimeTranslationTextSizeSp(textSizeSp: Float) {
+        preferenceRepository.update(PreferenceRepository.REALTIME_TRANSLATION_TEXT_SIZE_SP, textSizeSp)
+    }
+
+    fun updateRealtimeTranslationBoldText(enabled: Boolean) {
+        preferenceRepository.update(PreferenceRepository.REALTIME_TRANSLATION_BOLD_TEXT, enabled)
+    }
+
+    fun updateRealtimeTranslationBackgroundColor(colorArgb: Int) {
+        preferenceRepository.update(PreferenceRepository.REALTIME_TRANSLATION_BACKGROUND_COLOR, colorArgb)
+    }
+
+    fun updateRealtimeTranslationBackgroundOpacity(opacity: Float) {
+        preferenceRepository.update(PreferenceRepository.REALTIME_TRANSLATION_BACKGROUND_OPACITY, opacity)
+    }
+
     fun updateReplyTransparency(transparency: Float) {
         preferenceRepository.update(PreferenceRepository.REPLY_TRANSPARENCY, transparency)
     }

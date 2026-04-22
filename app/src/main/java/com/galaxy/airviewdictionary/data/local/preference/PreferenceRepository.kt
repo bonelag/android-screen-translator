@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -62,6 +63,13 @@ class PreferenceRepository @Inject constructor(@ApplicationContext val context: 
         val MENU_BAR_COMPOSITION = stringPreferencesKey("menu_bar_composition")
         val TRANSLATION_TRANSPARENCY = floatPreferencesKey("translation_transparency")
         val TRANSLATION_CLOSE_DELAY = longPreferencesKey("translation_close_delay")
+        val REALTIME_TRANSLATION_TRANSPARENT_BACKGROUND = booleanPreferencesKey("realtime_translation_transparent_background")
+        val REALTIME_TRANSLATION_SMART_BACKGROUND = booleanPreferencesKey("realtime_translation_smart_background")
+        val REALTIME_TRANSLATION_TEXT_COLOR = intPreferencesKey("realtime_translation_text_color")
+        val REALTIME_TRANSLATION_TEXT_SIZE_SP = floatPreferencesKey("realtime_translation_text_size_sp")
+        val REALTIME_TRANSLATION_BOLD_TEXT = booleanPreferencesKey("realtime_translation_bold_text")
+        val REALTIME_TRANSLATION_BACKGROUND_COLOR = intPreferencesKey("realtime_translation_background_color")
+        val REALTIME_TRANSLATION_BACKGROUND_OPACITY = floatPreferencesKey("realtime_translation_background_opacity")
         val REPLY_TRANSPARENCY = floatPreferencesKey("reply_transparency")
         val USE_CORRECTION_KIT = booleanPreferencesKey("use_correction_kit")
         val CORRECTION_KIT_TYPE = stringPreferencesKey("correction_kit_type")
@@ -178,6 +186,34 @@ class PreferenceRepository @Inject constructor(@ApplicationContext val context: 
 
     val translationCloseDelayFlow: Flow<Long> = preferenceFlow.map { preferences ->
         preferences[TRANSLATION_CLOSE_DELAY] ?: 1600L
+    }
+
+    val realtimeTranslationTransparentBackgroundFlow: Flow<Boolean> = preferenceFlow.map { preferences ->
+        preferences[REALTIME_TRANSLATION_TRANSPARENT_BACKGROUND] ?: false
+    }
+
+    val realtimeTranslationSmartBackgroundFlow: Flow<Boolean> = preferenceFlow.map { preferences ->
+        preferences[REALTIME_TRANSLATION_SMART_BACKGROUND] ?: true
+    }
+
+    val realtimeTranslationTextColorFlow: Flow<Int> = preferenceFlow.map { preferences ->
+        preferences[REALTIME_TRANSLATION_TEXT_COLOR] ?: android.graphics.Color.WHITE
+    }
+
+    val realtimeTranslationTextSizeSpFlow: Flow<Float> = preferenceFlow.map { preferences ->
+        preferences[REALTIME_TRANSLATION_TEXT_SIZE_SP] ?: 14f
+    }
+
+    val realtimeTranslationBoldTextFlow: Flow<Boolean> = preferenceFlow.map { preferences ->
+        preferences[REALTIME_TRANSLATION_BOLD_TEXT] ?: false
+    }
+
+    val realtimeTranslationBackgroundColorFlow: Flow<Int> = preferenceFlow.map { preferences ->
+        preferences[REALTIME_TRANSLATION_BACKGROUND_COLOR] ?: android.graphics.Color.BLACK
+    }
+
+    val realtimeTranslationBackgroundOpacityFlow: Flow<Float> = preferenceFlow.map { preferences ->
+        preferences[REALTIME_TRANSLATION_BACKGROUND_OPACITY] ?: 0.8f
     }
 
     val replyTransparencyFlow: Flow<Float> = preferenceFlow.map { preferences ->

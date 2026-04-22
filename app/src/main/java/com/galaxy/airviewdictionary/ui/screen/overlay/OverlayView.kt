@@ -25,6 +25,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
@@ -73,39 +74,36 @@ abstract class OverlayView : OverlayServiceEventListener {
         Timber.tag(TAG).i("#### cast ####")
         avdCoroutineScope = CoroutineScope(Dispatchers.IO + Job())
         overlayViewCoroutineScope = CoroutineScope(Dispatchers.Main + Job())
-        overlayService = getOverlayService(applicationContext)
+        try {
+            overlayService = getOverlayService(applicationContext)
 
-        launchInOverlayViewCoroutineScope {
-            val oldView = if (reattach && view?.isAttachedToWindow == true) view else null
-            if (view == null || reattach) {
-                view = ComposeView(overlayService).apply {
-                    setViewTreeLifecycleOwner(overlayService)
-                    setViewTreeSavedStateRegistryOwner(overlayService)
-                    setContent(composable)
-                    touchListener(overlayService.applicationContext)?.let {
-                        setOnTouchListener(it)
-                    }
-                    if (reattach && oldView != null) {
-                        visibility = View.INVISIBLE
+            withContext(Dispatchers.Main.immediate) {
+                val oldView = if (reattach && view?.isAttachedToWindow == true) view else null
+                if (view == null || reattach) {
+                    view = ComposeView(overlayService).apply {
+                        setViewTreeLifecycleOwner(overlayService)
+                        setViewTreeSavedStateRegistryOwner(overlayService)
+                        setContent(composable)
+                        touchListener(overlayService.applicationContext)?.let {
+                            setOnTouchListener(it)
+                        }
+                        if (reattach && oldView != null) {
+                            visibility = View.INVISIBLE
+                        }
                     }
                 }
-            }
 
-            val localView = view
-            if (localView != null && !localView.isAttachedToWindow) {
-                launchInOverlayViewCoroutineScope {
+                val localView = view
+                if (localView != null && !localView.isAttachedToWindow) {
                     try {
                         getWindowManager(overlayService.applicationContext).addView(localView, layoutParams)
                         if (reattach && oldView != null) {
                             localView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
                             oldView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
 
-                            // 저장해두기
                             this@OverlayView.oldView = oldView
-                            // 이전 Runnable이 있다면 먼저 제거
                             oldView.removeCallbacks(oldViewDetachRunnable)
 
-                            // 새로운 Runnable 등록
                             oldViewDetachRunnable = Runnable {
                                 localView.visibility = View.VISIBLE
                                 oldView.visibility = View.INVISIBLE
@@ -113,7 +111,7 @@ abstract class OverlayView : OverlayServiceEventListener {
                                     try {
                                         val rippleDrawable = view?.background as? RippleDrawable
                                         rippleDrawable?.setVisible(false, false)
-                                        rippleDrawable?.state = intArrayOf() // ripple 해제
+                                        rippleDrawable?.state = intArrayOf()
                                         getWindowManager(overlayService.applicationContext).removeView(oldView)
                                     } catch (e: Exception) {
                                         try {
@@ -123,7 +121,6 @@ abstract class OverlayView : OverlayServiceEventListener {
                                         }
                                     }
                                 }
-                                // 작업이 완료되면 정리
                                 this@OverlayView.oldView = null
                                 oldViewDetachRunnable = null
                             }
@@ -135,14 +132,23 @@ abstract class OverlayView : OverlayServiceEventListener {
                     }
                 }
             }
-        }
 
-        isRunning.set(true)
+            isRunning.set(true)
 
-        FirebaseAnalytics.getInstance(applicationContext)
-            .logEvent(FirebaseAnalytics.Event.SCREEN_VIEW) {
-                param(FirebaseAnalytics.Param.SCREEN_CLASS, TAG)
+            FirebaseAnalytics.getInstance(applicationContext)
+                .logEvent(FirebaseAnalytics.Event.SCREEN_VIEW) {
+                    param(FirebaseAnalytics.Param.SCREEN_CLASS, TAG)
+                }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "cast failed")
+            isRunning.set(false)
+            safelyDetachCurrentView()
+            if (::overlayService.isInitialized) {
+                overlayService.unregisterListener(this@OverlayView)
             }
+            serviceConnector?.unbind()
+            serviceConnector = null
+        }
     }
 
     open suspend fun cast(
@@ -181,6 +187,19 @@ abstract class OverlayView : OverlayServiceEventListener {
 
     fun isServiceInitialized(): Boolean {
         return ::overlayService.isInitialized
+    }
+
+    private fun safelyDetachCurrentView() {
+        try {
+            view?.let { localView ->
+                if (localView.isAttachedToWindow && ::overlayService.isInitialized) {
+                    getWindowManager(overlayService.applicationContext).removeViewImmediate(localView)
+                }
+            }
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "safelyDetachCurrentView failed")
+        }
+        view = null
     }
 
     open fun updateLayout(applicationContext: Context) {

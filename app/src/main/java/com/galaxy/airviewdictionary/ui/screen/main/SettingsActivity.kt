@@ -3,20 +3,25 @@ package com.galaxy.airviewdictionary.ui.screen.main
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AppOpsManager
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Point
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Process
 import android.os.StrictMode
 import android.os.StrictMode.ThreadPolicy
+import android.provider.Settings
 import android.view.WindowInsets
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.compose.BackHandler
 import androidx.activity.viewModels
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.AnimatedVisibility
@@ -47,6 +52,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.DarkMode
@@ -90,6 +96,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -110,7 +117,6 @@ import androidx.compose.ui.layout.positionOnScreen
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
@@ -135,7 +141,6 @@ import com.galaxy.airviewdictionary.data.local.screen.ScreenInfoHolder
 import com.galaxy.airviewdictionary.data.local.tts.TtsEngineInfo
 import com.galaxy.airviewdictionary.data.local.tts.TtsLanguageInfo
 import com.galaxy.airviewdictionary.data.local.vision.TextDetectMode
-import com.galaxy.airviewdictionary.data.remote.ai.CorrectionKitType
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationKitType
 import com.galaxy.airviewdictionary.extensions.finishService
 import com.galaxy.airviewdictionary.extensions.gotoStore
@@ -154,6 +159,7 @@ import com.galaxy.airviewdictionary.ui.screen.overlay.settings.SliderDialogView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleView
 import com.galaxy.airviewdictionary.ui.screen.overlay.voicelist.VoiceListView
 import com.galaxy.airviewdictionary.ui.screen.permissions.ScreenCapturePermissionRequesterActivity
+import com.galaxy.airviewdictionary.ui.screen.permissions.NotificationPermissionRequesterActivity
 import com.galaxy.airviewdictionary.ui.theme.LocalAppDarkTheme
 import com.galaxy.airviewdictionary.ui.theme.ScreenTranslatorTheme
 import com.google.firebase.Firebase
@@ -210,6 +216,26 @@ class SettingsActivity : AVDActivity() {
         }
     }
 
+    private val overlayPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (hasOverlayPermission()) {
+            beginTranslatorStartFlow()
+        } else {
+            screenTranslatorRunningFlow.value = false
+        }
+    }
+
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (areNotificationsEnabledCompat()) {
+            beginTranslatorStartFlow()
+        } else {
+            screenTranslatorRunningFlow.value = false
+        }
+    }
+
 //    private val snackMessageFlow = MutableStateFlow("")
 
     private fun applySettingsWindowTheme(isDarkMode: Boolean) {
@@ -239,10 +265,72 @@ class SettingsActivity : AVDActivity() {
         if (!MenuBarView.INSTANCE.isRunning.get()) {
             MenuBarView.INSTANCE.cast(applicationContext)
         }
+        if (!MenuBarView.INSTANCE.isRunning.get()) {
+            stopScreenTranslator()
+            return
+        }
         if (!TargetHandleView.INSTANCE.isRunning.get()) {
             TargetHandleView.INSTANCE.cast(applicationContext)
         }
+        if (!TargetHandleView.INSTANCE.isRunning.get()) {
+            stopScreenTranslator()
+            return
+        }
         screenTranslatorRunningFlow.value = true
+    }
+
+    private fun hasOverlayPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true
+        }
+        if (Settings.canDrawOverlays(this)) {
+            return true
+        }
+        return try {
+            val appOpsManager = getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                appOpsManager.unsafeCheckOpNoThrow(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    Process.myUid(),
+                    packageName
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                appOpsManager.checkOpNoThrow(
+                    AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW,
+                    Process.myUid(),
+                    packageName
+                )
+            }
+            mode == AppOpsManager.MODE_ALLOWED
+        } catch (e: Exception) {
+            Timber.tag(TAG).e(e, "hasOverlayPermission check failed")
+            false
+        }
+    }
+
+    private fun areNotificationsEnabledCompat(): Boolean {
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        return notificationManager.areNotificationsEnabled()
+    }
+
+    private fun beginTranslatorStartFlow() {
+        if (!hasOverlayPermission()) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            overlayPermissionLauncher.launch(intent)
+            return
+        }
+
+        if (!areNotificationsEnabledCompat()) {
+            val intent = Intent(this, NotificationPermissionRequesterActivity::class.java)
+            notificationPermissionLauncher.launch(intent)
+            return
+        }
+
+        requestScreenCaptureAndStart()
     }
 
     private fun requestScreenCaptureAndStart() {
@@ -361,7 +449,7 @@ class SettingsActivity : AVDActivity() {
                                         if (screenTranslatorRunningFlow.value) {
                                             stopScreenTranslator()
                                         } else {
-                                            requestScreenCaptureAndStart()
+                                            beginTranslatorStartFlow()
                                         }
                                     }
                                 )
@@ -431,15 +519,8 @@ class SettingsActivity : AVDActivity() {
         super.onPause()
     }
 
-    private var _textDetectMode: TextDetectMode? = null
-
-    private fun runTranslation(point: Point, textDetectMode: TextDetectMode) {
-        _textDetectMode = textDetectMode
-        TargetHandleView.INSTANCE.runTranslation(point, textDetectMode)
-    }
-
     private fun closeTranslation() {
-        TargetHandleView.INSTANCE.closeTranslation(_textDetectMode)
+        TargetHandleView.INSTANCE.closeTranslation(null)
     }
 
     enum class MenuItemPosition {
@@ -447,6 +528,11 @@ class SettingsActivity : AVDActivity() {
         Top,
         Middle,
         Bottom,
+    }
+
+    private enum class SettingsPage {
+        Root,
+        RealtimeDisplay,
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////
@@ -460,9 +546,13 @@ class SettingsActivity : AVDActivity() {
         paddingValues: PaddingValues,
     ) {
         val context = LocalContext.current
-        val localView = LocalView.current
         val lifecycleOwner = LocalLifecycleOwner.current
         val coroutineScope = rememberCoroutineScope()
+        var settingsPage by rememberSaveable { mutableStateOf(SettingsPage.Root) }
+
+        BackHandler(enabled = settingsPage != SettingsPage.Root) {
+            settingsPage = SettingsPage.Root
+        }
 
         val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
         val versionCode: Long = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
@@ -485,7 +575,6 @@ class SettingsActivity : AVDActivity() {
 
         val contentPadding = dimensionResource(R.dimen.settings_screen_horizontal_padding)
         val sectionSpacing = dimensionResource(R.dimen.settings_section_spacing)
-        val cornerRound = dimensionResource(R.dimen.settings_card_radius)
         val appBarHeight = dimensionResource(R.dimen.settings_appbar_height)
         val headerChipSize = dimensionResource(R.dimen.settings_header_chip_size)
         val rowMinHeight = dimensionResource(R.dimen.settings_row_min_height)
@@ -536,13 +625,37 @@ class SettingsActivity : AVDActivity() {
             initialValue = MenuConfig.WHOLE
         )
 
-        // Translation transparency
-        val translationTransparencyTextOffset = remember { mutableStateOf(Point(0, 0)) }
-        val translationTransparencySubtextOffset = remember { mutableStateOf(Point(0, 0)) }
-        val translationPoint = remember { mutableStateOf(Point(0, 0)) }
         val translationTransparency by viewModel.preferenceRepository.translationTransparencyFlow.collectAsStateWithLifecycle(
             lifecycle = lifecycleOwner.lifecycle,
             initialValue = 1.0f
+        )
+        val realtimeTranslationTransparentBackground by viewModel.preferenceRepository.realtimeTranslationTransparentBackgroundFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = false
+        )
+        val realtimeTranslationSmartBackground by viewModel.preferenceRepository.realtimeTranslationSmartBackgroundFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = true
+        )
+        val realtimeTranslationTextColorArgb by viewModel.preferenceRepository.realtimeTranslationTextColorFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = android.graphics.Color.WHITE
+        )
+        val realtimeTranslationTextSizeSp by viewModel.preferenceRepository.realtimeTranslationTextSizeSpFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = 14f
+        )
+        val realtimeTranslationBoldText by viewModel.preferenceRepository.realtimeTranslationBoldTextFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = false
+        )
+        val realtimeTranslationBackgroundColorArgb by viewModel.preferenceRepository.realtimeTranslationBackgroundColorFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = android.graphics.Color.BLACK
+        )
+        val realtimeTranslationBackgroundOpacity by viewModel.preferenceRepository.realtimeTranslationBackgroundOpacityFlow.collectAsStateWithLifecycle(
+            lifecycle = lifecycleOwner.lifecycle,
+            initialValue = 0.8f
         )
 
         // Translation close delay
@@ -565,11 +678,6 @@ class SettingsActivity : AVDActivity() {
         val useCorrectionKit by viewModel.preferenceRepository.useCorrectionKitFlow.collectAsStateWithLifecycle(
             lifecycle = lifecycleOwner.lifecycle,
             initialValue = false
-        )
-
-        val correctionKit by viewModel.preferenceRepository.correctionKitTypeFlow.collectAsStateWithLifecycle(
-            lifecycle = lifecycleOwner.lifecycle,
-            initialValue = CorrectionKitType.CHAT_GPT
         )
 
         // Automatic translation playback
@@ -651,11 +759,6 @@ class SettingsActivity : AVDActivity() {
         var showTtsEngineDialog by remember { mutableStateOf(false) }
         var showTtsLanguageDialog by remember { mutableStateOf(false) }
         var showTtsVoiceDialog by remember { mutableStateOf(false) }
-
-        val screenTranslatorRunning by screenTranslatorRunningFlow.collectAsStateWithLifecycle(
-            lifecycle = lifecycleOwner.lifecycle,
-            initialValue = false
-        )
 
         LaunchedEffect(Unit) {
             viewModel.ttsRepository.primeEngineState(delayMs = 250L)
@@ -799,21 +902,40 @@ class SettingsActivity : AVDActivity() {
                             .padding(horizontal = contentPadding),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(headerChipSize)
-                                .background(accentSoftColor, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.ic_menubar),
-                                contentDescription = "Settings",
-                                modifier = Modifier.size(18.dp),
-                                colorFilter = ColorFilter.tint(accentColor)
-                            )
+                        if (settingsPage == SettingsPage.Root) {
+                            Box(
+                                modifier = Modifier
+                                    .size(headerChipSize)
+                                    .background(accentSoftColor, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ic_menubar),
+                                    contentDescription = "Settings",
+                                    modifier = Modifier.size(18.dp),
+                                    colorFilter = ColorFilter.tint(accentColor)
+                                )
+                            }
+                        } else {
+                            SettingsTopBarActionButton(
+                                onClick = {
+                                    settingsPage = SettingsPage.Root
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                    contentDescription = stringResource(android.R.string.cancel),
+                                    modifier = Modifier.size(20.dp),
+                                    tint = accentColor
+                                )
+                            }
                         }
                         Text(
-                            text = stringResource(id = R.string.settings_title),
+                            text = if (settingsPage == SettingsPage.Root) {
+                                stringResource(id = R.string.settings_title)
+                            } else {
+                                stringResource(id = R.string.settings_menu_realtime_display)
+                            },
                             color = accentColor,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontSize = 20.sp,
@@ -865,12 +987,13 @@ class SettingsActivity : AVDActivity() {
                         }
                 )
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(viewModel.scrollState)
-                        .padding(horizontal = contentPadding, vertical = sectionSpacing)
-                ) {
+                if (settingsPage == SettingsPage.Root) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(viewModel.scrollState)
+                            .padding(horizontal = contentPadding, vertical = sectionSpacing)
+                    ) {
                 SectionCard(
                     painter = painterResource(id = R.drawable.ic_drag_handle),
                     categoryName = getString(R.string.settings_menu_cat_pointer),
@@ -1157,48 +1280,12 @@ class SettingsActivity : AVDActivity() {
                 ) {
                     MenuTextItem(
                         menuItemPosition = MenuItemPosition.Top,
-                        text = getString(R.string.settings_menu_translation_transparency),
+                        text = getString(R.string.settings_menu_realtime_display),
                         paddingValues = paddingValues,
-                        onTextPositioned = { offset ->
-                            translationTransparencyTextOffset.value = Point(offset.x - startPadding, offset.y)
-                        },
-                        onGloballyPositioned = { layoutCoordinates ->
-                            val center = layoutCoordinates.boundsInWindow().center
-                            val rowStartPadding = paddingValues.calculateLeftPadding(layoutDirection).toPx(context)
-                            val posX = center.x.toInt() - rowStartPadding
-                            translationPoint.value = Point(posX, center.y.toInt())
-                        },
-                        subText = getTransparencyValueText(translationTransparency),
-                        onSubtextPositioned = { offset ->
-                            translationTransparencySubtextOffset.value = Point(offset.x - startPadding, offset.y)
-                        },
                         onClick = {
-                            if (CaptureRepository.mediaProjectionToken == null) {
-                                val intent = Intent(context, ScreenCapturePermissionRequesterActivity::class.java)
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                context.startActivity(intent)
-                            } else {
-                                runTranslation(translationPoint.value, textDetectMode)
-                                coroutineScope.launch {
-                                    settingStringFlow.value = getTransparencyValueText(translationTransparency)
-                                    SliderDialogView.INSTANCE.cast(
-                                        applicationContext = applicationContext,
-                                        initialValue = 1.0f - translationTransparency,
-                                        valueRange = 0.0f..0.5f,
-                                        onValueChange = { value ->
-                                            viewModel.updateTranslationTransparency(1.0f - value)
-                                            settingStringFlow.value = getTransparencyValueText(1.0f - value)
-                                        },
-                                        menuText = Pair(getString(R.string.settings_menu_translation_transparency), translationTransparencyTextOffset.value),
-                                        menuSubtext = Pair(settingStringFlow, translationTransparencySubtextOffset.value),
-                                        onDismissRequest = {
-                                            closeTranslation()
-                                            SliderDialogView.INSTANCE.clear()
-                                        },
-                                    )
-                                }
-                            }
-                        }
+                            settingsPage = SettingsPage.RealtimeDisplay
+                        },
+                        subText = getString(R.string.settings_realtime_preview_open)
                     )
                     MenuTextItem(
                         menuItemPosition = MenuItemPosition.Middle,
@@ -1441,6 +1528,29 @@ class SettingsActivity : AVDActivity() {
                         showChevron = false
                     )
                 }
+                    }
+                } else {
+                    RealtimeTranslationDisplaySettingsPage(
+                        modifier = Modifier.fillMaxSize(),
+                        state = RealtimeTranslationDisplaySettingsState(
+                            translationTransparency = translationTransparency,
+                            transparentBackground = realtimeTranslationTransparentBackground,
+                            smartBackground = realtimeTranslationSmartBackground,
+                            textColorArgb = realtimeTranslationTextColorArgb,
+                            textSizeSp = realtimeTranslationTextSizeSp,
+                            boldText = realtimeTranslationBoldText,
+                            backgroundColorArgb = realtimeTranslationBackgroundColorArgb,
+                            backgroundOpacity = realtimeTranslationBackgroundOpacity,
+                        ),
+                        onTranslationTransparencyChange = viewModel::updateTranslationTransparency,
+                        onTransparentBackgroundChange = viewModel::updateRealtimeTranslationTransparentBackground,
+                        onSmartBackgroundChange = viewModel::updateRealtimeTranslationSmartBackground,
+                        onTextColorChange = viewModel::updateRealtimeTranslationTextColor,
+                        onTextSizeChange = viewModel::updateRealtimeTranslationTextSizeSp,
+                        onBoldTextChange = viewModel::updateRealtimeTranslationBoldText,
+                        onBackgroundColorChange = viewModel::updateRealtimeTranslationBackgroundColor,
+                        onBackgroundOpacityChange = viewModel::updateRealtimeTranslationBackgroundOpacity,
+                    )
                 }
             }
         }

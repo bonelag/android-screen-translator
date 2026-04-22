@@ -46,6 +46,7 @@ import com.galaxy.airviewdictionary.data.local.vision.model.VisionResponse
 import com.galaxy.airviewdictionary.ui.screen.overlay.OverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleViewModel
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TranslateStatus
+import com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayView
 import com.galaxy.airviewdictionary.ui.screen.overlay.translation.TranslationView
 import com.galaxy.airviewdictionary.ui.screen.permissions.ScreenCapturePermissionRequesterActivity
 import kotlinx.coroutines.Job
@@ -132,12 +133,15 @@ open class AreaSelectionView : OverlayView() {
         )
 
         val translationViewLiveState: Boolean by TranslationView.liveStateFlow.collectAsStateWithLifecycle()
+        val realtimeOverlayLiveState: Boolean by RealtimeTranslationOverlayView.liveStateFlow.collectAsStateWithLifecycle()
 
         // 영역선택 시작
         fun startSelection() {
             translateJob?.cancel()
+            RealtimeTranslationOverlayView.INSTANCE.clear()
             selectionStarted.value = true
             targetHandleViewModel.areaSelectingStateFlow.value = true
+            targetHandleViewModel.selectedAreaFlow.value = null
             haptic()
         }
 
@@ -145,9 +149,11 @@ open class AreaSelectionView : OverlayView() {
         fun resetSelection(currentPosition: Point) {
             translateJob?.cancel()
             targetHandleViewModel.cancelCapture()
+            RealtimeTranslationOverlayView.INSTANCE.clear()
 
             selectedCompleted.value = false // 영역선택 취소
             targetHandleViewModel.areaSelectingStateFlow.value = false
+            targetHandleViewModel.selectedAreaFlow.value = null
             selectionStarted.value = false // 영역선택 시작 취소
 
             layoutParams.x = currentPosition.x
@@ -165,6 +171,7 @@ open class AreaSelectionView : OverlayView() {
         fun completeSelection(selectedArea: Rect) {
             selectedCompleted.value = true
             targetHandleViewModel.areaSelectingStateFlow.value = false
+            targetHandleViewModel.selectedAreaFlow.value = Rect(selectedArea)
             haptic()
             requestTranslate(context, selectedArea)
         }
@@ -272,7 +279,7 @@ open class AreaSelectionView : OverlayView() {
                     .background(visionTextColor.copy(alpha = if (isDarkMode) 0.18f else 0.14f)),
                 contentAlignment = Alignment.Center
             ) {
-                if (selectedCompleted.value && !translationViewLiveState) {
+                if (selectedCompleted.value && !translationViewLiveState && !realtimeOverlayLiveState) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(dimensionResource(id = R.dimen.target_pointer_progress_dimen)),
                         color = Color(0xFF48baef),
@@ -324,6 +331,7 @@ open class AreaSelectionView : OverlayView() {
         translateJob?.cancel()
         targetHandleViewModel.areaSelectingStateFlow.value = false
         targetHandleViewModel.translateStatusFlow.value = TranslateStatus.Idle
+        targetHandleViewModel.selectedAreaFlow.value = null
         super.clear()
     }
 
