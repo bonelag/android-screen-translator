@@ -51,7 +51,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import com.galaxy.airviewdictionary.data.local.preference.PreferenceRepository
 import com.galaxy.airviewdictionary.data.local.vision.TextDetectMode
 import com.galaxy.airviewdictionary.ui.common.MP4Player
-import com.galaxy.airviewdictionary.ui.screen.intro.SplashActivity
+import com.galaxy.airviewdictionary.ui.screen.main.SettingsActivity
 import com.galaxy.airviewdictionary.ui.theme.ScreenTranslatorTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -196,7 +196,7 @@ class OnBoardingActivity : ComponentActivity() {
                                     pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                 } else {
                                     viewModel.preferenceRepository.update(PreferenceRepository.WAS_TRAILER_SHOWN, true)
-                                    SplashActivity.start(context = context)
+                                    SettingsActivity.start(context = context)
                                     (context as OnBoardingActivity).finish()
                                 }
                             }

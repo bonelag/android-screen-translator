@@ -49,21 +49,6 @@
         </activity>
 
         <activity
-            android:name=".ui.screen.intro.SplashActivity"
-            android:configChanges="orientation|screenSize"
-            android:excludeFromRecents="true"
-            android:exported="true"
-            android:launchMode="singleTop"
-            android:theme="@style/Theme.ScreenTranslator.Transparent"
-            android:windowSoftInputMode="adjustResize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <activity
             android:name=".ui.screen.permissions.NotificationPermissionRequesterActivity"
             android:excludeFromRecents="true"
             android:exported="false"
@@ -79,10 +64,16 @@
 
         <activity
             android:name=".ui.screen.main.SettingsActivity"
-            android:exported="false"
+            android:exported="true"
             android:launchMode="singleTop"
             android:theme="@style/Theme.SettingsActivity"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <activity
             android:name=".ui.screen.reply.ReplyActivity"

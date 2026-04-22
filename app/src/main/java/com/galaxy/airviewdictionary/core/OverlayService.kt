@@ -45,7 +45,6 @@ import com.galaxy.airviewdictionary.data.remote.firebase.RemoteConfigRepository
 import com.galaxy.airviewdictionary.data.remote.translation.Language
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationKitType
 import com.galaxy.airviewdictionary.data.remote.translation.TranslationRepository
-import com.galaxy.airviewdictionary.ui.screen.intro.SplashActivity
 import com.galaxy.airviewdictionary.ui.screen.main.SettingsActivity
 import com.galaxy.airviewdictionary.ui.screen.overlay.Event
 import com.galaxy.airviewdictionary.ui.screen.overlay.languagelist.LanguageListViewModel
@@ -130,7 +129,7 @@ class OverlayService : LifecycleService(), SavedStateRegistryOwner, ViewModelSto
             isForegroundStarted = true
             ensureNotificationObserverStarted()
         } catch (e: SecurityException) {
-            val intent = Intent(applicationContext, SplashActivity::class.java)
+            val intent = Intent(applicationContext, SettingsActivity::class.java)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         } catch (e: Exception) {

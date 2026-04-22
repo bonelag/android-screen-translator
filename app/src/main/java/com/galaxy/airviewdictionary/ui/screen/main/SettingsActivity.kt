@@ -143,7 +143,6 @@ import com.galaxy.airviewdictionary.extensions.toPx
 import com.galaxy.airviewdictionary.extensions.vibrate
 import com.galaxy.airviewdictionary.ui.common.fontDimensionResource
 import com.galaxy.airviewdictionary.ui.screen.AVDActivity
-import com.galaxy.airviewdictionary.ui.screen.intro.SplashActivity
 import com.galaxy.airviewdictionary.ui.screen.overlay.dialog.DialogView
 import com.galaxy.airviewdictionary.ui.screen.overlay.languagelist.LanguageListView
 import com.galaxy.airviewdictionary.ui.screen.overlay.menubar.MenuBar
@@ -415,18 +414,6 @@ class SettingsActivity : AVDActivity() {
 
     override fun onResume() {
         super.onResume()
-
-        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val areNotificationsEnabled = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || notificationManager.areNotificationsEnabled()
-        val canDrawOverlays = android.provider.Settings.canDrawOverlays(applicationContext)
-
-        if (!areNotificationsEnabled || !canDrawOverlays) {
-            val intent = Intent(applicationContext, SplashActivity::class.java)
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            startActivity(intent)
-            finish()
-            return
-        }
 
         liveStateFlow.value = true
         screenTranslatorRunningFlow.value =
