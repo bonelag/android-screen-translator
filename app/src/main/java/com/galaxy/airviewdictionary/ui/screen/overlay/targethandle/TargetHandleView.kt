@@ -215,7 +215,7 @@ class TargetHandleView private constructor() : OverlayView() {
             modifier = Modifier
                 .wrapContentSize()
 //                .background(Color.Cyan)
-                .alpha(if (captureStatus == CaptureStatus.Requested || (textDetectMode == TextDetectMode.FIXED_AREA && fixedAreaViewState == FixedAreaView.State.Translating)) 0.01f else 1.0f)
+                .alpha(1.0f)
                 .width(dimensionResource(id = R.dimen.target_handle_width))
                 .height(dimensionResource(id = R.dimen.target_handle_height)),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -312,6 +312,15 @@ class TargetHandleView private constructor() : OverlayView() {
 
             val tapDetector = GestureDetector(applicationContext, object : GestureDetector.SimpleOnGestureListener() {
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+                    // ấn 1 lần vào nó là hủy mọi công việc hiện có
+                    closeTranslation(null)
+                    com.galaxy.airviewdictionary.ui.screen.overlay.selection.AreaSelectionView.INSTANCE.clear()
+                    com.galaxy.airviewdictionary.ui.screen.overlay.fixedarea.FixedAreaView.INSTANCE.clear()
+                    com.galaxy.airviewdictionary.ui.screen.overlay.fixedarea.FixedAreaTranslationView.INSTANCE.clear()
+                    com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeTranslationOverlayView.INSTANCE.clear()
+                    com.galaxy.airviewdictionary.ui.screen.overlay.translation.RealtimeSelectionActionView.INSTANCE.clear()
+                    com.galaxy.airviewdictionary.ui.screen.overlay.translation.TranslationView.INSTANCE.clear()
+                    viewModel.cancelCapture()
                     return true
                 }
 

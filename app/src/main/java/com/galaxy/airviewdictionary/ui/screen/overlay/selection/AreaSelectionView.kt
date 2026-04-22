@@ -345,7 +345,6 @@ open class AreaSelectionView : OverlayView() {
             val overlaysToHide = listOf(
                 this@AreaSelectionView,
                 MenuBarView.INSTANCE,
-                TargetHandleView.INSTANCE,
                 TranslationView.INSTANCE,
                 RealtimeTranslationOverlayView.INSTANCE,
                 RealtimeSelectionActionView.INSTANCE,
@@ -355,7 +354,7 @@ open class AreaSelectionView : OverlayView() {
                 overlaysToHide.forEach { overlay ->
                     runCatching { overlay.setWindowVisible(false) }
                 }
-                kotlinx.coroutines.delay(32)
+                kotlinx.coroutines.delay(100) // Ensure enough time for views to be hidden before capture
 
                 val captureResponse: CaptureResponse = targetHandleViewModel.captureRepository.request()
                 Timber.tag(TAG).d("captureResponse $captureResponse")
@@ -377,8 +376,8 @@ open class AreaSelectionView : OverlayView() {
                 val selectionCapture = createSelectionCapture(
                     originalBitmap = captureResponse.bitmap,
                     selectionRect = selectedArea,
-                    paddingPx = 18.dp.toPx(context),
-                    minimumEdgePx = 88.dp.toPx(context),
+                    paddingPx = 0,
+                    minimumEdgePx = 1,
                 )
 
                 val sourceLanguageCode: String = targetHandleViewModel.preferenceRepository.sourceLanguageCodeFlow.first()

@@ -437,6 +437,9 @@ open class FixedAreaView : OverlayView() {
     }
 
     override fun clear() {
+        previousCleanCaptureBitmap = null
+        lastQuickCapturedBitmap = null
+        previousSourceText = ""
         RealtimeTranslationOverlayView.INSTANCE.clear()
         FixedAreaTranslationView.INSTANCE.clear()
         fixedAreaViewBackgroundAlphaJob?.cancel()
@@ -465,20 +468,60 @@ open class FixedAreaView : OverlayView() {
 
     private var detectedString = ""
 
+    private var previousCleanCaptureBitmap: android.graphics.Bitmap? = null
+    private var lastQuickCapturedBitmap: android.graphics.Bitmap? = null
+    private var previousSourceText: String = ""
+
+    private fun calculateSimilarity(s1: String, s2: String): Float {
+        if (s1.isEmpty() && s2.isEmpty()) return 1.0f
+        if (s1.isEmpty() || s2.isEmpty()) return 0.0f
+        val len1 = s1.length
+        val len2 = s2.length
+        val distance = Array(len1 + 1) { IntArray(len2 + 1) }
+        for (i in 0..len1) distance[i][0] = i
+        for (j in 0..len2) distance[0][j] = j
+        for (i in 1..len1) {
+            for (j in 1..len2) {
+                val cost = if (s1[i - 1] == s2[j - 1]) 0 else 1
+                distance[i][j] = kotlin.math.min(
+                    kotlin.math.min(distance[i - 1][j] + 1, distance[i][j - 1] + 1),
+                    distance[i - 1][j - 1] + cost
+                )
+            }
+        }
+        val maxLen = kotlin.math.max(len1, len2)
+        return (maxLen - distance[len1][len2]) / maxLen.toFloat()
+    }
+
     private suspend fun requestVision(context: Context, selectedArea: Rect) {
+        // Quick Capture (WITH overlays visible) to check if anything changed (video or our overlay)
+        val quickCaptureRes = targetHandleViewModel.captureRepository.request()
+        if (quickCaptureRes is CaptureResponse.Success) {
+            val quickCapture = createSelectionCapture(
+                originalBitmap = quickCaptureRes.bitmap,
+                selectionRect = selectedArea,
+                paddingPx = 0,
+                minimumEdgePx = 1,
+            )
+            // If the screen hasn't changed at all (video static, overlay static) since last check, do nothing!
+            if (lastQuickCapturedBitmap != null && lastQuickCapturedBitmap!!.sameAs(quickCapture.bitmap)) {
+                return
+            }
+            lastQuickCapturedBitmap = quickCapture.bitmap
+        }
+
+        // The screen changed. We must get a clean capture for OCR. So we hide the overlays.
         val overlaysToHide = listOf(
             MenuBarView.INSTANCE,
-            TargetHandleView.INSTANCE,
             RealtimeTranslationOverlayView.INSTANCE,
             RealtimeSelectionActionView.INSTANCE,
             FixedAreaTranslationView.INSTANCE,
-            this@FixedAreaView,
         )
         val screenTransaction = try {
             overlaysToHide.forEach { overlay ->
                 runCatching { overlay.setWindowVisible(false) }
             }
-            delay(32)
+            delay(100)
 
             val captureResponse: CaptureResponse = targetHandleViewModel.captureRepository.request()
             Timber.tag(TAG).d("captureResponse $captureResponse")
@@ -499,9 +542,15 @@ open class FixedAreaView : OverlayView() {
             val selectionCapture = createSelectionCapture(
                 originalBitmap = captureResponse.bitmap,
                 selectionRect = selectedArea,
-                paddingPx = 18.dp.toPx(context),
-                minimumEdgePx = 96.dp.toPx(context),
+                paddingPx = 0,
+                minimumEdgePx = 1,
             )
+
+            // Layer 1 Check: clean image. If the video underneath hasn't changed, don't OCR!
+            if (previousCleanCaptureBitmap != null && previousCleanCaptureBitmap!!.sameAs(selectionCapture.bitmap)) {
+                return
+            }
+            previousCleanCaptureBitmap = selectionCapture.bitmap
 
             val sourceLanguageCode: String = targetHandleViewModel.preferenceRepository.sourceLanguageCodeFlow.first()
             val visionResponse: VisionResponse = targetHandleViewModel.visionRepository.request(
@@ -524,14 +573,16 @@ open class FixedAreaView : OverlayView() {
             }
         }
 
-        val visionResponseString = extractSelectionText(screenTransaction, selectedArea).replace("\n", " ")
-//        Timber.tag(TAG).d("[visionResponseString] [$visionResponseString]")
-        if (detectedString == visionResponseString) {
+        val visionResponseString = extractSelectionText(screenTransaction, selectedArea).replace("\n", " ").trim()
+
+        // Layer 2 Check: similarity > 80%
+        val similarity = calculateSimilarity(previousSourceText, visionResponseString)
+        if (similarity > 0.8f) {
             return
         }
-
+        previousSourceText = visionResponseString
         detectedString = visionResponseString
-        Timber.tag(TAG).d("[detectedString] $detectedString")
+        Timber.tag(TAG).d("[detectedString] $detectedString (similarity: $similarity)")
         requestTranslate(screenTransaction, detectedString)
     }
 
