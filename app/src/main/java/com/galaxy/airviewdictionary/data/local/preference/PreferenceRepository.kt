@@ -72,6 +72,7 @@ class PreferenceRepository @Inject constructor(@ApplicationContext val context: 
         val TTS_VOICE_NAME = stringPreferencesKey("tts_voice_name")
         val TTS_ORDERED_VOICE_NAMES = stringPreferencesKey("tts_ordered_voice_names")
         val TTS_ENGINE_PACKAGE = stringPreferencesKey("tts_engine_package")
+        val UI_DARK_THEME = booleanPreferencesKey("ui_dark_theme")
 
         val SOURCE_LANGUAGE_CODE_HISTORY = stringPreferencesKey("source_language_code_history")
         val TARGET_LANGUAGE_CODE_HISTORY = stringPreferencesKey("target_language_code_history")
@@ -220,6 +221,10 @@ class PreferenceRepository @Inject constructor(@ApplicationContext val context: 
 
     val ttsEnginePackageFlow: Flow<String> = preferenceFlow.map { preferences ->
         preferences[TTS_ENGINE_PACKAGE] ?: ""
+    }
+
+    val uiDarkThemeFlow: Flow<Boolean> = preferenceFlow.map { preferences ->
+        preferences[UI_DARK_THEME] ?: true
     }
 
     val sourceLanguageCodeHistoryFlow: Flow<List<String>> = preferenceFlow.map { preferences ->

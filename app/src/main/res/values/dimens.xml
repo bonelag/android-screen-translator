@@ -51,5 +51,16 @@
     <!-- Area Selection 최소 높이 -->
     <dimen name="area_selection_min_height">20dp</dimen>
 
+    <dimen name="settings_screen_horizontal_padding">16dp</dimen>
+    <dimen name="settings_screen_top_spacing">12dp</dimen>
+    <dimen name="settings_section_spacing">16dp</dimen>
+    <dimen name="settings_card_radius">24dp</dimen>
+    <dimen name="settings_header_icon_size">20dp</dimen>
+    <dimen name="settings_header_chip_size">32dp</dimen>
+    <dimen name="settings_row_min_height">58dp</dimen>
+    <dimen name="settings_appbar_height">54dp</dimen>
+    <dimen name="settings_dialog_radius">26dp</dimen>
+    <dimen name="settings_value_corner_radius">12dp</dimen>
+    <dimen name="settings_slider_sheet_height">164dp</dimen>
 
 </resources>

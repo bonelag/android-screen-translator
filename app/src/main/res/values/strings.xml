@@ -65,6 +65,8 @@
 
     <!-- SettingsActivity -->
     <string name="settings_title">Settings</string>
+    <string name="settings_action_switch_to_light">Switch to light theme</string>
+    <string name="settings_action_switch_to_dark">Switch to dark theme</string>
     <string name="settings_menu_cat_pointer">Pointer Handle</string>
     <string name="settings_menu_pointer_docking_delay">Pointer Docking Delay</string>
     <string name="settings_menu_haptic_feedback_to_detection">Haptic Feedback on Detection</string>

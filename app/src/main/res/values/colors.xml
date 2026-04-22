@@ -21,4 +21,38 @@
 
     <color name="fixed_area_color">#006600</color>
     <color name="fixed_area_color_dark">#009900</color>
+
+    <color name="settings_background_dark">#07121D</color>
+    <color name="settings_background_light">#EEF3FB</color>
+    <color name="settings_appbar_dark">#0D1424</color>
+    <color name="settings_appbar_light">#FFFFFF</color>
+    <color name="settings_card_dark">#1B2234</color>
+    <color name="settings_card_light">#FFFFFF</color>
+    <color name="settings_border_dark">#2B3550</color>
+    <color name="settings_border_light">#D8E0EF</color>
+    <color name="settings_divider_dark">#273149</color>
+    <color name="settings_divider_light">#E6ECF6</color>
+    <color name="settings_text_primary_dark">#F2F6FF</color>
+    <color name="settings_text_primary_light">#10192A</color>
+    <color name="settings_text_secondary_dark">#8F9AB3</color>
+    <color name="settings_text_secondary_light">#6E7A91</color>
+    <color name="settings_accent">#4B78FF</color>
+    <color name="settings_accent_soft">#18274A</color>
+    <color name="settings_accent_soft_light">#E5EEFF</color>
+    <color name="settings_success">#4CAF50</color>
+    <color name="settings_switch_checked_track">#7E9DFF</color>
+    <color name="settings_switch_unchecked_track">#CDD4E4</color>
+    <color name="settings_switch_checked_track_dark">#5C78D8</color>
+    <color name="settings_switch_unchecked_track_dark">#D8DCE7</color>
+    <color name="settings_switch_thumb">#FFFFFF</color>
+    <color name="settings_dialog_scrim">#8A04101E</color>
+    <color name="settings_slider_active_track_dark">#4B78FF</color>
+    <color name="settings_slider_inactive_track_dark">#31405F</color>
+    <color name="settings_slider_thumb_dark">#F8FBFF</color>
+    <color name="settings_slider_thumb_border_dark">#AABCEB</color>
+    <color name="settings_slider_active_track_light">#3464F6</color>
+    <color name="settings_slider_inactive_track_light">#D6E1F4</color>
+    <color name="settings_slider_thumb_light">#2E5AE8</color>
+    <color name="settings_slider_thumb_border_light">#FFFFFF</color>
+    <color name="settings_slider_tick_hidden">#00000000</color>
 </resources>

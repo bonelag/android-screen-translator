@@ -17,29 +17,39 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -82,6 +92,7 @@ class LanguageListView private constructor() : OverlayView() {
 
     companion object {
         val INSTANCE: LanguageListView by lazy(LazyThreadSafetyMode.SYNCHRONIZED) { LanguageListView() }
+        val liveStateFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
     }
 
     private lateinit var viewModel: LanguageListViewModel
@@ -105,7 +116,7 @@ class LanguageListView private constructor() : OverlayView() {
             } else {
                 WindowManager.LayoutParams.TYPE_PHONE
             },
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                     or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                     or WindowManager.LayoutParams.FLAG_DIM_BEHIND
                     or WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS,
@@ -118,6 +129,12 @@ class LanguageListView private constructor() : OverlayView() {
 
         this.type.value = type
         super.cast(applicationContext, false)
+        liveStateFlow.value = true
+    }
+
+    override fun clear() {
+        liveStateFlow.value = false
+        super.clear()
     }
 
     override fun onServiceConnected(overlayService: OverlayService) {
@@ -171,6 +188,12 @@ class LanguageListView private constructor() : OverlayView() {
 
         val oppositeLanguage = if (type.value == Type.SOURCE) targetLanguage else sourceLanguage
 
+        var searchQuery by remember { mutableStateOf("") }
+        val filteredLanguages = remember(searchQuery, languages) {
+            if (searchQuery.isBlank()) languages
+            else languages.filter { it.displayName.contains(searchQuery, ignoreCase = true) }
+        }
+
         val listState = rememberLazyListState()
 
         val showHeaderDivider = remember {
@@ -216,14 +239,46 @@ class LanguageListView private constructor() : OverlayView() {
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         // Header
-                        Text(
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color.Transparent)
-                                .padding(start = contentHorizontalPadding, top = 16.dp, bottom = 4.dp, end = contentHorizontalPadding),
-                            text = stringResource(id = if (type.value == Type.SOURCE) R.string.title_language_list_view_source else R.string.title_language_list_view_target),
-                            style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
-                            color = if (isDarkMode) Color.White else Color.Black
+                                .padding(horizontal = contentHorizontalPadding, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                modifier = Modifier.weight(1f),
+                                text = stringResource(id = if (type.value == Type.SOURCE) R.string.title_language_list_view_source else R.string.title_language_list_view_target),
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                                color = if (isDarkMode) Color.White else Color.Black
+                            )
+                        }
+
+                        // Search Bar
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = contentHorizontalPadding)
+                                .padding(bottom = 8.dp)
+                                .height(50.dp),
+                            placeholder = { Text(text = context.getString(android.R.string.search_go)) },
+                            singleLine = true,
+                            leadingIcon = {
+                                Icon(Icons.Default.Search, contentDescription = "Search")
+                            },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear")
+                                    }
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = TextFieldDefaults.colors(
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            )
                         )
 
                         AnimatedVisibility(visible = showHeaderDivider.value) {
@@ -239,28 +294,30 @@ class LanguageListView private constructor() : OverlayView() {
                             modifier = Modifier.weight(1f),
                             state = listState
                         ) {
-                            items(languageCodeHistory) { language ->
-                                LanguageItem(
-                                    language = language,
-                                    oppositeLanguage = oppositeLanguage,
-                                    contentColor = contentColor,
-                                    contentDisabledColor = contentDisabledColor,
-                                    contentHorizontalPadding = contentHorizontalPadding,
-                                ) { selectedLanguage ->
-                                    viewModel.updateLanguage(type.value == Type.SOURCE, selectedLanguage, oppositeLanguage)
-                                    clear()
+                            if (searchQuery.isBlank()) {
+                                items(languageCodeHistory) { language ->
+                                    LanguageItem(
+                                        language = language,
+                                        oppositeLanguage = oppositeLanguage,
+                                        contentColor = contentColor,
+                                        contentDisabledColor = contentDisabledColor,
+                                        contentHorizontalPadding = contentHorizontalPadding,
+                                    ) { selectedLanguage ->
+                                        viewModel.updateLanguage(type.value == Type.SOURCE, selectedLanguage, oppositeLanguage)
+                                        clear()
+                                    }
+                                }
+
+                                if (languageCodeHistory.isNotEmpty()) {
+                                    item {
+                                        DottedDivider(
+                                            horizontalPadding = contentHorizontalPadding,
+                                        )
+                                    }
                                 }
                             }
 
-                            if (languageCodeHistory.isNotEmpty()) {
-                                item {
-                                    DottedDivider(
-                                        horizontalPadding = contentHorizontalPadding,
-                                    )
-                                }
-                            }
-
-                            items(languages) { language ->
+                            items(filteredLanguages) { language ->
                                 LanguageItem(
                                     language = language,
                                     oppositeLanguage = oppositeLanguage,

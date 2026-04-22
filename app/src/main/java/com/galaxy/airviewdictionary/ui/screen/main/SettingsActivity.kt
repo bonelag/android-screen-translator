@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -26,7 +27,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.Arrangement
@@ -43,14 +43,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AllInclusive
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FiberNew
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VoiceChat
 import androidx.compose.material.icons.outlined.CardGiftcard
@@ -64,6 +67,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -76,6 +80,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -102,11 +107,14 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -143,6 +151,7 @@ import com.galaxy.airviewdictionary.ui.screen.overlay.settings.SliderDialogView
 import com.galaxy.airviewdictionary.ui.screen.overlay.targethandle.TargetHandleView
 import com.galaxy.airviewdictionary.ui.screen.overlay.voicelist.VoiceListView
 import com.galaxy.airviewdictionary.ui.screen.permissions.ScreenCapturePermissionRequesterActivity
+import com.galaxy.airviewdictionary.ui.theme.LocalAppDarkTheme
 import com.galaxy.airviewdictionary.ui.theme.ScreenTranslatorTheme
 import com.google.firebase.Firebase
 import com.google.firebase.analytics.analytics
@@ -178,6 +187,7 @@ class SettingsActivity : AVDActivity() {
     }
 
     private val viewModel: SettingsViewModel by viewModels()
+    private var currentUiDarkTheme: Boolean = true
 
     private val settingFloatFlow = MutableStateFlow(1.0f)
 
@@ -197,6 +207,29 @@ class SettingsActivity : AVDActivity() {
     }
 
 //    private val snackMessageFlow = MutableStateFlow("")
+
+    private fun applySettingsWindowTheme(isDarkMode: Boolean) {
+        currentUiDarkTheme = isDarkMode
+        val darkColor = getColor(R.color.settings_background_dark)
+        val lightColor = getColor(R.color.settings_background_light)
+        val windowColor = if (isDarkMode) darkColor else lightColor
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            window.decorView.setOnApplyWindowInsetsListener { view, insets ->
+                val statusBarInsets = insets.getInsets(WindowInsets.Type.statusBars())
+                view.setBackgroundColor(windowColor)
+                view.setPadding(0, statusBarInsets.top, 0, 0)
+                insets
+            }
+            window.decorView.requestApplyInsets()
+        } else {
+            window.statusBarColor = windowColor
+            window.navigationBarColor = windowColor
+        }
+
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !isDarkMode
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = !isDarkMode
+    }
 
     private suspend fun startScreenTranslator() {
         if (!MenuBarView.INSTANCE.isRunning.get()) {
@@ -237,25 +270,27 @@ class SettingsActivity : AVDActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             val policy = ThreadPolicy.Builder().permitAll().build()
             StrictMode.setThreadPolicy(policy)
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val isDarkMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            val colorWhite = "#FFf2f1f4".toColorInt()
-            val colorBlack = "#FF010102".toColorInt()
-            window.decorView.setOnApplyWindowInsetsListener { view, insets ->
-                val statusBarInsets = insets.getInsets(WindowInsets.Type.statusBars())
-                view.setBackgroundColor(if (isDarkMode) colorBlack else colorWhite)
-                view.setPadding(0, statusBarInsets.top, 0, 0)
-                insets
-            }
-            WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = !isDarkMode
-            WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightNavigationBars = !isDarkMode
         }
 
         setContent {
-            ScreenTranslatorTheme {
+            val isDarkMode by viewModel.preferenceRepository.uiDarkThemeFlow.collectAsStateWithLifecycle(
+                initialValue = true
+            )
+
+            SideEffect {
+                applySettingsWindowTheme(isDarkMode)
+            }
+
+            ScreenTranslatorTheme(
+                darkTheme = isDarkMode,
+                dynamicColor = false
+            ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    val isDarkMode = isSystemInDarkTheme()
-                    val backgroundColor = if (isDarkMode) Color(0xFF010102) else Color(0xFFf2f1f4)
+                    val backgroundColor = if (isDarkMode) {
+                        colorResource(R.color.settings_background_dark)
+                    } else {
+                        colorResource(R.color.settings_background_light)
+                    }
 
                     val snackBarHostState = remember { SnackbarHostState() }
 
@@ -320,11 +355,7 @@ class SettingsActivity : AVDActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus && Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val isDarkMode = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
-            val colorWhite = android.graphics.Color.parseColor("#FFf2f1f4")
-            val colorBlack = android.graphics.Color.parseColor("#FF010102")
-            window.statusBarColor = if (isDarkMode) colorBlack else colorWhite
-            window.navigationBarColor = if (isDarkMode) colorBlack else colorWhite
+            applySettingsWindowTheme(currentUiDarkTheme)
         }
     }
 
@@ -415,18 +446,22 @@ class SettingsActivity : AVDActivity() {
 
         val menuExpandAnimationDuration = 300
 
-        val contentPadding = 9.dp
-        val cornerRound = 32.dp
+        val contentPadding = dimensionResource(R.dimen.settings_screen_horizontal_padding)
+        val sectionSpacing = dimensionResource(R.dimen.settings_section_spacing)
+        val cornerRound = dimensionResource(R.dimen.settings_card_radius)
+        val appBarHeight = dimensionResource(R.dimen.settings_appbar_height)
+        val headerChipSize = dimensionResource(R.dimen.settings_header_chip_size)
+        val rowMinHeight = dimensionResource(R.dimen.settings_row_min_height)
         val startPadding = paddingValues.calculateLeftPadding(layoutDirection).toPx(context)
 
-        val isDarkMode = isSystemInDarkTheme()
-        val contentColor = if (isDarkMode) Color(0xFFfcfcfc) else Color(0xFF010000)
-        val subContentColor = if (isDarkMode) Color(0xFFb7b7ba) else Color(0xFF626265)
-        val switchScale = 0.70f
-        val switchThumbColor = if (isDarkMode) Color.Black else Color.White
-        val switchTrackColor = if (isDarkMode) Color(0xFF6a91b2) else Color(0xFF446987)
-        val dividerColor = if (isDarkMode) Color(0xFF343434) else Color(0xFFd5d5d5)
-        val buttonColor = if (isDarkMode) Color(0xFFfafafa) else Color(0xFF171717)
+        val isDarkMode = LocalAppDarkTheme.current
+        val backgroundColor = if (isDarkMode) colorResource(R.color.settings_background_dark) else colorResource(R.color.settings_background_light)
+        val appBarColor = if (isDarkMode) colorResource(R.color.settings_appbar_dark) else colorResource(R.color.settings_appbar_light)
+        val contentColor = if (isDarkMode) colorResource(R.color.settings_text_primary_dark) else colorResource(R.color.settings_text_primary_light)
+        val subContentColor = if (isDarkMode) colorResource(R.color.settings_text_secondary_dark) else colorResource(R.color.settings_text_secondary_light)
+        val accentColor = colorResource(R.color.settings_accent)
+        val accentSoftColor = if (isDarkMode) colorResource(R.color.settings_accent_soft) else colorResource(R.color.settings_accent_soft_light)
+        val dividerColor = if (isDarkMode) colorResource(R.color.settings_divider_dark) else colorResource(R.color.settings_divider_light)
 
         // Pointer docking delay
         val dockingDelayTextOffset = remember { mutableStateOf(Point(0, 0)) }
@@ -711,904 +746,696 @@ class SettingsActivity : AVDActivity() {
         }
 
         Column(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .background(backgroundColor)
         ) {
-                // ActionBar
-                Row(
-                    modifier = Modifier
-                        .height(58.dp)
-                        .fillMaxWidth()
-//                    .background(Color(0x3399ffff))
-                        .padding(start = 18.dp, end = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(id = R.string.settings_title),
-                        color = contentColor,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 22.sp),
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = appBarColor
+            ) {
+                Column {
+                    Row(
                         modifier = Modifier
-                            .align(Alignment.CenterVertically)
-                            .weight(1f)
-                    )
-
-                    // Share IconButton
-                    IconButton(
-                        onClick = {
-//                        Toast.makeText(context, "Share clicked", Toast.LENGTH_SHORT).show()
-                            val appPackageName = context.packageName
-                            val appStoreLink = "https://play.google.com/store/apps/details?id=$appPackageName"
-                            val appName = context.getString(R.string.app_name)
-                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, "$appName: $appStoreLink")
-                            }
-                            context.startActivity(Intent.createChooser(shareIntent, "Share via"))
-                        },
-                        modifier = Modifier.align(Alignment.CenterVertically)
+                            .fillMaxWidth()
+                            .height(appBarHeight)
+                            .padding(horizontal = contentPadding),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Share,
-                            contentDescription = "Share",
+                        Box(
                             modifier = Modifier
-                                .size(18.dp)
-                                .alpha(0.75f),
-                            tint = contentColor
-                        )
-                    }
-
-                    // Power IconButton
-                    IconButton(
-                        onClick = {
-                            viewModel.analyticsRepository.settingsReport(
-                                dockDelay = dockingDelay.toString(),
-                                haptic = dragHandleHaptic.toString(),
-                                menuTransparency = (menuBarTransparency * 100).roundToInt().toString(),
-                                menuComposition = menuBarConfig.name,
-                                transTransparency = (translationTransparency * 100).roundToInt().toString(),
-                                closeDelay = translationCloseDelay.toString(),
-                                replyTransparency = (replyTransparency * 100).roundToInt().toString(),
-                                correctionKit = if (useCorrectionKit) correctionKit.name else "none",
-                                autoTTS = automaticTranslationPlayback.toString(),
-                                TTSVoice = ttsSelectedVoice?.name ?: "unknown",
-                                TTSRate = BigDecimal(ttsSpeechRate.toDouble()).setScale(1, RoundingMode.HALF_UP).toString(),
+                                .size(headerChipSize)
+                                .background(accentSoftColor, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.ic_menubar),
+                                contentDescription = "Settings",
+                                modifier = Modifier.size(18.dp),
+                                colorFilter = ColorFilter.tint(accentColor)
                             )
-
-                            if (screenTranslatorRunning) {
-                                stopScreenTranslator()
-                            } else {
-                                requestScreenCaptureAndStart()
-                            }
-                        },
-                        modifier = Modifier.align(Alignment.CenterVertically)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PowerSettingsNew,
-                            contentDescription = if (screenTranslatorRunning) "Stop translation" else "Start translation",
+                        }
+                        Text(
+                            text = stringResource(id = R.string.settings_title),
+                            color = accentColor,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
                             modifier = Modifier
-                                .size(21.dp)
-                                .alpha(0.75f),
-                            tint = if (screenTranslatorRunning) Color(0xFF4CAF50) else contentColor
+                                .padding(start = 12.dp)
+                                .weight(1f)
                         )
-                    }
-                }
 
-                // MenuBarView Area
+                        SettingsTopBarActionButton(
+                            onClick = {
+                                viewModel.updateUiDarkTheme(!isDarkMode)
+                            }
+                        ) {
+                            Icon(
+                                imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                                contentDescription = if (isDarkMode) {
+                                    stringResource(R.string.settings_action_switch_to_light)
+                                } else {
+                                    stringResource(R.string.settings_action_switch_to_dark)
+                                },
+                                modifier = Modifier.size(18.dp),
+                                tint = accentColor
+                            )
+                        }
+
+                        SettingsTopBarActionButton(
+                            onClick = {
+                                viewModel.analyticsRepository.settingsReport(
+                                    dockDelay = dockingDelay.toString(),
+                                    haptic = dragHandleHaptic.toString(),
+                                    menuTransparency = (menuBarTransparency * 100).roundToInt().toString(),
+                                    menuComposition = menuBarConfig.name,
+                                    transTransparency = (translationTransparency * 100).roundToInt().toString(),
+                                    closeDelay = translationCloseDelay.toString(),
+                                    replyTransparency = (replyTransparency * 100).roundToInt().toString(),
+                                    correctionKit = if (useCorrectionKit) correctionKit.name else "none",
+                                    autoTTS = automaticTranslationPlayback.toString(),
+                                    TTSVoice = ttsSelectedVoice?.name ?: "unknown",
+                                    TTSRate = BigDecimal(ttsSpeechRate.toDouble()).setScale(1, RoundingMode.HALF_UP).toString(),
+                                )
+
+                                if (screenTranslatorRunning) {
+                                    stopScreenTranslator()
+                                } else {
+                                    requestScreenCaptureAndStart()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PowerSettingsNew,
+                                contentDescription = if (screenTranslatorRunning) "Stop translation" else "Start translation",
+                                modifier = Modifier.size(18.dp),
+                                tint = if (screenTranslatorRunning) colorResource(R.color.settings_success) else subContentColor
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = dividerColor, thickness = 1.dp)
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(if (isPortrait) 56.dp else 38.dp)
-//                    .background(Color(0x5517fa23))
+                        .height(0.dp)
                         .onGloballyPositioned { layoutCoordinates ->
                             val center = layoutCoordinates.boundsInRoot().center
-                            Timber
-                                .tag(TAG)
-                                .d("paddingValues $paddingValues")
-                            val endPadding = paddingValues
-                                .calculateRightPadding(layoutDirection)
-                                .toPx(context)
-                            Timber
-                                .tag(TAG)
-                                .d("startPadding $startPadding")
-                            Timber
-                                .tag(TAG)
-                                .d("endPadding $endPadding")
+                            val endPadding = paddingValues.calculateRightPadding(layoutDirection).toPx(context)
                             val posX = (endPadding - startPadding) / 2
-                            Timber
-                                .tag(TAG)
-                                .d("posX $posX")
-
-                            val topPadding = paddingValues
-                                .calculateTopPadding()
-                                .toPx(context)
-                            Timber
-                                .tag(TAG)
-                                .d("topPadding $topPadding")
+                            val topPadding = paddingValues.calculateTopPadding().toPx(context)
                             val posY = center.y.toInt() - topPadding - (if (isPortrait) 0.dp else 12.dp).toPx(context)
-                            Timber
-                                .tag(TAG)
-                                .d("menuBarViewSettlePosition ${Point(posX, posY)}")
-
                             menuBarViewSettlePositionFlow.value = Point(posX, posY)
                         }
                 )
 
-                Box(
-                    modifier = Modifier.padding(start = contentPadding, top = contentPadding, end = contentPadding)
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(viewModel.scrollState)
+                        .padding(horizontal = contentPadding, vertical = sectionSpacing)
                 ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        shape = RoundedCornerShape(cornerRound),
-                        color = Color.Transparent
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(viewModel.scrollState)
-                        ) {
-                            MenuCategory(
-                                painter = painterResource(id = R.drawable.ic_drag_handle),
-                                categoryName = getString(R.string.settings_menu_cat_pointer),
-                                isRtl = isRtl,
-                            )
-
-                            MenuItem(
-                                menuItemPosition = MenuItemPosition.Top,
-                                onClick = {
-                                    coroutineScope.launch {
-                                        settingStringFlow.value = getSecondValueText(dockingDelay)
-                                        SliderDialogView.INSTANCE.cast(
-                                            applicationContext = applicationContext,
-                                            initialValue = dockingDelay.toFloat(),
-                                            valueRange = 1000f..15000f,
-                                            steps = 13,
-                                            onValueChange = { value ->
-                                                Timber.tag(TAG).d("Pointer docking delay onValueChange : $value")
-                                                viewModel.updateDockingDelay(value.toLong())
-                                                viewModel.updateDragHandleDocking(value < 15000.0f)
-                                                settingStringFlow.value = getSecondValueText(value.toLong())
-                                            },
-                                            menuText = Pair(getString(R.string.settings_menu_pointer_docking_delay), dockingDelayTextOffset.value),
-                                            dockingDelayText = Pair(settingStringFlow, dockingDelaySubtextOffset.value),
-                                            onDismissRequest = {
-                                                SliderDialogView.INSTANCE.clear()
-                                            },
-                                        )
-                                    }
-                                }
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 50.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    MenuText(
-                                        text = getString(R.string.settings_menu_pointer_docking_delay),
-                                        onTextPositioned = { offset ->
-                                            dockingDelayTextOffset.value = Point(offset.x - startPadding, offset.y)
-                                        },
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .height(38.dp)
-                                            .width(80.dp)
-//                                        .background(Color(0x33aaff22))
-                                            .onGloballyPositioned { layoutCoordinates ->
-                                                val offset = layoutCoordinates.positionOnScreen()
-                                                val startPadding = paddingValues
-                                                    .calculateLeftPadding(layoutDirection)
-                                                    .toPx(context)
-                                                val posX = offset.x.toInt() + layoutCoordinates.size.width - startPadding
-//                                            Timber.tag(TAG).d("Pointer docking delay posX $posX")
-                                                dockingDelaySubtextOffset.value = Point(posX, offset.y.toInt())
-                                            },
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        if (dockingDelay < 15000.0f) {
-                                            Text(
-                                                modifier = Modifier.padding(end = 6.dp),
-                                                text = getSecondValueText(dockingDelay),
-                                                color = subContentColor,
-                                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontDimensionResource(R.dimen.settings_menu_subtext_size)),
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Default.AllInclusive,
-                                                contentDescription = "Pointer docking delay Infinity",
-                                                modifier = Modifier
-                                                    .size(36.dp)
-                                                    .padding(end = 12.dp),
-                                                tint = subContentColor
-                                            )
-                                        }
-                                    }
-                                }
+                SectionCard(
+                    painter = painterResource(id = R.drawable.ic_drag_handle),
+                    categoryName = getString(R.string.settings_menu_cat_pointer),
+                    iconSize = 19.dp,
+                    isRtl = isRtl,
+                    modifier = Modifier.padding(bottom = sectionSpacing)
+                ) {
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Top,
+                        text = getString(R.string.settings_menu_pointer_docking_delay),
+                        paddingValues = paddingValues,
+                        onTextPositioned = { offset ->
+                            dockingDelayTextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        subText = if (dockingDelay < 15000L) getSecondValueText(dockingDelay) else "∞",
+                        onSubtextPositioned = { offset ->
+                            dockingDelaySubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        onClick = {
+                            coroutineScope.launch {
+                                settingStringFlow.value = getSecondValueText(dockingDelay)
+                                SliderDialogView.INSTANCE.cast(
+                                    applicationContext = applicationContext,
+                                    initialValue = dockingDelay.toFloat(),
+                                    valueRange = 1000f..15000f,
+                                    steps = 13,
+                                    onValueChange = { value ->
+                                        viewModel.updateDockingDelay(value.toLong())
+                                        viewModel.updateDragHandleDocking(value < 15000.0f)
+                                        settingStringFlow.value = getSecondValueText(value.toLong())
+                                    },
+                                    menuText = Pair(getString(R.string.settings_menu_pointer_docking_delay), dockingDelayTextOffset.value),
+                                    dockingDelayText = Pair(settingStringFlow, dockingDelaySubtextOffset.value),
+                                    onDismissRequest = {
+                                        SliderDialogView.INSTANCE.clear()
+                                    },
+                                )
                             }
-
-                            MenuItem(
-                                menuItemPosition = MenuItemPosition.Bottom,
-                                onClick = {
-                                    if (!dragHandleHaptic) {
+                        }
+                    )
+                    MenuItem(
+                        menuItemPosition = MenuItemPosition.Bottom,
+                        onClick = {
+                            if (!dragHandleHaptic) {
+                                context.vibrate()
+                            }
+                            viewModel.updateDragHandleHaptic(!dragHandleHaptic)
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            MenuText(text = getString(R.string.settings_menu_haptic_feedback_to_detection))
+                            SettingsSwitchControl(
+                                checked = dragHandleHaptic,
+                                onCheckedChange = { value ->
+                                    if (value) {
                                         context.vibrate()
                                     }
-                                    viewModel.updateDragHandleHaptic(!dragHandleHaptic)
-                                }
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    MenuText(
-                                        text = getString(R.string.settings_menu_haptic_feedback_to_detection),
-                                    )
-                                    Switch(
-                                        checked = dragHandleHaptic,
-                                        onCheckedChange = { value ->
-                                            if (value) {
-                                                context.vibrate()
-                                            }
-                                            viewModel.updateDragHandleHaptic(value)
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = switchThumbColor,
-                                            checkedTrackColor = switchTrackColor
-                                        ),
-                                        modifier = Modifier
-                                            .scale(switchScale)
-                                            .align(Alignment.CenterVertically)
-                                            .semantics {
-                                                contentDescription = if (dragHandleHaptic) {
-                                                    "Haptic feedback to detection on"
-                                                } else {
-                                                    "Haptic feedback to detection off"
-                                                }
-                                            }
-                                    )
-                                }
-                            }
-
-                            MenuCategory(
-                                painter = painterResource(id = R.drawable.ic_menubar),
-                                categoryName = getString(R.string.settings_menu_cat_menubar),
-                                iconSize = 25.dp,
-                                isRtl = isRtl,
-                            )
-
-                            MenuItem(
-                                menuItemPosition = if (menuBarVisibility) MenuItemPosition.Top else MenuItemPosition.Single,
-                                onClick = {
-                                    coroutineScope.launch {
-                                        settingStringFlow.value = getTransparencyValueText(menuBarTransparency)
-                                        SliderDialogView.INSTANCE.cast(
-                                            applicationContext = applicationContext,
-                                            initialValue = 1.0f - menuBarTransparency,
-                                            valueRange = 0.0f..0.50f,
-                                            onValueChange = { value ->
-                                                Timber.tag(TAG).d("Menubar transparency onValueChange : $value")
-                                                viewModel.updateMenuBarTransparency(1.0f - value)
-                                                viewModel.updateMenuBarVisibility(value < 0.5f)
-                                                settingStringFlow.value = getTransparencyValueText(1.0f - value)
-                                            },
-                                            menuText = Pair(getString(R.string.settings_menu_menubar_transparency), menuBarTransparencyTextOffset.value),
-                                            menuBarVisibilityText = Pair(settingStringFlow, menuBarTransparencySubtextOffset.value),
-                                            onDismissRequest = {
-                                                SliderDialogView.INSTANCE.clear()
-                                            },
-                                        )
-                                    }
-                                }
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 50.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    MenuText(
-                                        text = getString(R.string.settings_menu_menubar_transparency),
-                                        onTextPositioned = { offset ->
-                                            menuBarTransparencyTextOffset.value = Point(offset.x - startPadding, offset.y)
-                                        },
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(38.dp)
-                                            .onGloballyPositioned { layoutCoordinates ->
-                                                val offset = layoutCoordinates.positionOnScreen()
-                                                val startPadding = paddingValues
-                                                    .calculateLeftPadding(layoutDirection)
-                                                    .toPx(context)
-                                                val posX = offset.x.toInt() + layoutCoordinates.size.width - startPadding
-                                                menuBarTransparencySubtextOffset.value = Point(posX, offset.y.toInt())
-                                            },
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        if ((1.0f - menuBarTransparency) > 0.49f) {
-                                            Icon(
-                                                imageVector = Icons.Default.VisibilityOff,
-                                                contentDescription = "Menubar transparency",
-                                                modifier = Modifier
-                                                    .size(32.dp)
-                                                    .padding(end = 8.dp),
-                                                tint = subContentColor
-                                            )
-                                        } else {
-                                            Text(
-                                                modifier = Modifier.padding(end = 6.dp),
-                                                text = getTransparencyValueText(menuBarTransparency),
-                                                color = subContentColor,
-                                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontDimensionResource(R.dimen.settings_menu_subtext_size)),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            AnimatedVisibility(
-                                visible = menuBarVisibility,
-                                enter = expandVertically(animationSpec = tween(menuExpandAnimationDuration)),
-                                exit = shrinkVertically(animationSpec = tween(menuExpandAnimationDuration)),
-                                content = {
-                                    fun onClick() {
-                                        coroutineScope.launch {
-                                            settingStringFlow.value = menuBarConfig.name
-                                            SliderDialogView.INSTANCE.cast(
-                                                applicationContext = applicationContext,
-                                                initialValue = when (menuBarConfig) {
-                                                    MenuConfig.WHOLE -> 0.0f
-                                                    MenuConfig.DETECT_MODE_LANGUAGE -> 1.0f
-                                                    MenuConfig.LANGUAGE_TRANSLATION_KIT -> 2.0f
-                                                    MenuConfig.LANGUAGE -> 3.0f
-                                                    MenuConfig.WHOLE_SHORT -> 4.0f
-                                                    MenuConfig.DETECT_MODE_LANGUAGE_SHORT -> 5.0f
-                                                    MenuConfig.LANGUAGE_SHORT_TRANSLATION_KIT -> 6.0f
-                                                    MenuConfig.LANGUAGE_SHORT -> 7.0f
-                                                    MenuConfig.DETECT_MODE_TRANSLATION_KIT -> 8.0f
-                                                    MenuConfig.DETECT_MODE -> 9.0f
-                                                    MenuConfig.TRANSLATION_KIT -> 10.0f
-
-                                                    MenuConfig.V_DETECT_MODE -> 11.0f
-                                                    MenuConfig.V_DETECT_MODE_TRANSLATION_KIT -> 12.0f
-                                                    MenuConfig.V_LANGUAGE -> 13.0f
-                                                    MenuConfig.V_LANGUAGE_TRANSLATION_KIT -> 14.0f
-                                                    MenuConfig.V_DETECT_MODE_LANGUAGE -> 15.0f
-                                                    MenuConfig.V_WHOLE -> 16.0f
-                                                },
-                                                valueRange = 0.0f..16.0f,
-                                                steps = 15,
-                                                onValueChange = { value ->
-                                                    Timber.tag(TAG).d("onValueChange $value")
-                                                    val updatedMenuBarConfig =
-                                                        when (value.roundToInt().toFloat()) {
-                                                            0.0f -> MenuConfig.WHOLE
-                                                            1.0f -> MenuConfig.DETECT_MODE_LANGUAGE
-                                                            2.0f -> MenuConfig.LANGUAGE_TRANSLATION_KIT
-                                                            3.0f -> MenuConfig.LANGUAGE
-                                                            4.0f -> MenuConfig.WHOLE_SHORT
-                                                            5.0f -> MenuConfig.DETECT_MODE_LANGUAGE_SHORT
-                                                            6.0f -> MenuConfig.LANGUAGE_SHORT_TRANSLATION_KIT
-                                                            7.0f -> MenuConfig.LANGUAGE_SHORT
-                                                            8.0f -> MenuConfig.DETECT_MODE_TRANSLATION_KIT
-                                                            9.0f -> MenuConfig.DETECT_MODE
-                                                            10.0f -> MenuConfig.TRANSLATION_KIT
-
-                                                            11.0f -> MenuConfig.V_DETECT_MODE
-                                                            12.0f -> MenuConfig.V_DETECT_MODE_TRANSLATION_KIT
-                                                            13.0f -> MenuConfig.V_LANGUAGE
-                                                            14.0f -> MenuConfig.V_LANGUAGE_TRANSLATION_KIT
-                                                            15.0f -> MenuConfig.V_DETECT_MODE_LANGUAGE
-                                                            16.0f -> MenuConfig.V_WHOLE
-
-                                                            else -> MenuConfig.WHOLE
-                                                        }
-                                                    viewModel.updateMenuBarConfig(updatedMenuBarConfig)
-                                                    settingStringFlow.value = updatedMenuBarConfig.name
-                                                },
-                                                menuText = Pair(getString(R.string.settings_menu_menubar_composition), menuBarConfigTextOffset.value),
-                                                menuBarConfigText = Pair(settingStringFlow, menuBarConfigSubOffset.value),
-                                                onDismissRequest = {
-                                                    SliderDialogView.INSTANCE.clear()
-                                                },
-                                            )
-                                        }
-                                    }
-
-                                    Box(
-                                        modifier = Modifier
-                                            .wrapContentSize()
-                                            .background(
-                                                color = if (isDarkMode) Color(0xFF171717) else Color(0xFFfafafa),
-                                                shape = RoundedCornerShape(bottomStart = cornerRound, bottomEnd = cornerRound)
-                                            )
-                                    ) {
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(horizontal = 18.dp),
-                                            thickness = 0.7.dp,
-                                            color = dividerColor
-                                        )
-
-                                        Button(
-                                            onClick = { onClick() },
-                                            colors = ButtonDefaults.textButtonColors(contentColor = buttonColor),
-                                            shape = RoundedCornerShape(bottomStart = cornerRound, bottomEnd = cornerRound),
-                                            modifier = Modifier.wrapContentSize()
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .heightIn(min = 60.dp)
-                                                    .onGloballyPositioned { layoutCoordinates ->
-                                                        val offset = layoutCoordinates.positionOnScreen()
-                                                        val startPadding = paddingValues
-                                                            .calculateLeftPadding(layoutDirection)
-                                                            .toPx(context)
-                                                        val posX = offset.x.toInt() + layoutCoordinates.size.width - startPadding
-                                                        menuBarConfigSubOffset.value = Point(posX, offset.y.toInt())
-                                                    },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                MenuText(
-                                                    text = getString(R.string.settings_menu_menubar_composition),
-                                                    onTextPositioned = { offset ->
-                                                        menuBarConfigTextOffset.value = Point(offset.x - startPadding, offset.y)
-                                                    },
-                                                    modifier = Modifier
-                                                        .align(Alignment.TopStart)
-                                                        .padding(top = 14.dp, start = 5.dp)
-                                                )
-                                                val scaleFactor = 0.48f
-                                                Box(
-                                                    modifier = Modifier
-                                                        .align(Alignment.TopEnd)
-                                                        .padding(top = 15.dp, bottom = 15.dp, end = 8.dp)
-                                                        .wrapContentSize()
-                                                        .layout { measurable, constraints ->
-                                                            val placeable = measurable.measure(constraints)
-
-                                                            // 스케일링된 크기 계산
-                                                            val width = (placeable.width * scaleFactor).toInt()
-                                                            val height = (placeable.height * scaleFactor).toInt()
-
-                                                            layout(width, height) {
-                                                                placeable.placeRelative(0, 0)
-                                                            }
-                                                        }
-                                                ) {
-                                                    MenuBar(
-                                                        menuConfig = menuBarConfig,
-                                                        scaleFactor = scaleFactor,
-                                                        shadowPadding = 0.dp,
-                                                        borderWidth = 1.2.dp,
-                                                        textDetectMode = textDetectMode,
-                                                        sourceLanguageCode = sourceLanguageCode,
-                                                        sourceLanguage = sourceLanguage,
-                                                        targetLanguageCode = targetLanguageCode,
-                                                        targetLanguage = targetLanguage,
-                                                        translationKitType = kitType,
-                                                        isSwappable = { sourceLanguageCode, targetLanguageCode, kitType ->
-                                                            viewModel.isLanguageSwappable(sourceLanguageCode, targetLanguageCode, kitType)
-                                                        },
-                                                        modifier = Modifier.semantics {
-                                                            contentDescription = "Menu composition"
-                                                        }
-                                                    )
-                                                    // MenuBar 위치 클릭시 동작
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .matchParentSize()
-                                                            .clickable(
-                                                                onClick = { onClick() },
-                                                                indication = null,  // 누름 효과 없애기
-                                                                interactionSource = remember { MutableInteractionSource() }
-                                                            )
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            )
-
-                            MenuCategory(
-                                painter = painterResource(id = R.drawable.ic_ai),
-                                categoryName = getString(R.string.settings_menu_cat_ai),
-                                iconSize = 25.dp,
-                                isRtl = isRtl,
-                            )
-
-                            MenuItem(
-                                menuItemPosition = MenuItemPosition.Single,
-                                onClick = {
-                                    viewModel.updateUseCorrectionKit(!useCorrectionKit)
-                                }
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    MenuText(
-                                        text = "ChatGPT",
-                                    )
-                                    Switch(
-                                        checked = useCorrectionKit,
-                                        onCheckedChange = { value ->
-                                            viewModel.updateUseCorrectionKit(value)
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = switchThumbColor,
-                                            checkedTrackColor = switchTrackColor
-                                        ),
-                                        modifier = Modifier
-                                            .scale(switchScale)
-                                            .align(Alignment.CenterVertically)
-                                            .semantics {
-                                                contentDescription = if (useCorrectionKit) {
-                                                    "ChatGPT text correction on"
-                                                } else {
-                                                    "ChatGPT text correction off"
-                                                }
-                                            },
-                                    )
-                                }
-                            }
-
-                            MenuCategory(
-                                painter = painterResource(id = R.drawable.ic_translation_window),
-                                categoryName = getString(R.string.settings_menu_cat_translation),
-                                isRtl = isRtl,
-                            )
-
-                            MenuTextItem(
-                                menuItemPosition = MenuItemPosition.Top,
-                                text = getString(R.string.settings_menu_translation_transparency),
-                                paddingValues = paddingValues,
-                                onTextPositioned = { offset ->
-                                    translationTransparencyTextOffset.value = Point(offset.x - startPadding, offset.y)
+                                    viewModel.updateDragHandleHaptic(value)
                                 },
-                                onGloballyPositioned = { layoutCoordinates ->
-                                    val center = layoutCoordinates.boundsInWindow().center
-                                    val startPadding = paddingValues.calculateLeftPadding(layoutDirection).toPx(context)
-                                    val posX = center.x.toInt() - startPadding
-                                    translationPoint.value = Point(posX, center.y.toInt())
-                                },
-                                subText = getTransparencyValueText(translationTransparency),
-                                onSubtextPositioned = { offset ->
-                                    translationTransparencySubtextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                onClick = {
-                                    Timber.tag(TAG).d("onClick Translation transparency ${CaptureRepository.mediaProjectionToken}")
-                                    if (CaptureRepository.mediaProjectionToken == null) {
-                                        // 화면 캡처 권한을 요청
-                                        val intent = Intent(
-                                            context,
-                                            ScreenCapturePermissionRequesterActivity::class.java
-                                        )
-                                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        context.startActivity(intent)
-                                    } else {
-                                        runTranslation(translationPoint.value, textDetectMode)
-                                        coroutineScope.launch {
-                                            settingStringFlow.value = getTransparencyValueText(translationTransparency)
-                                            SliderDialogView.INSTANCE.cast(
-                                                applicationContext = applicationContext,
-                                                initialValue = 1.0f - translationTransparency,
-                                                valueRange = 0.0f..0.5f,
-                                                onValueChange = { value ->
-                                                    viewModel.updateTranslationTransparency(1.0f - value)
-                                                    settingStringFlow.value = getTransparencyValueText(1.0f - value)
-                                                },
-                                                menuText = Pair(getString(R.string.settings_menu_translation_transparency), translationTransparencyTextOffset.value),
-                                                menuSubtext = Pair(settingStringFlow, translationTransparencySubtextOffset.value),
-                                                onDismissRequest = {
-                                                    closeTranslation()
-                                                    SliderDialogView.INSTANCE.clear()
-                                                },
-                                            )
-                                        }
-                                    }
-                                }
+                                onContentDescription = "Haptic feedback to detection on",
+                                offContentDescription = "Haptic feedback to detection off"
                             )
-
-                            MenuTextItem(
-                                menuItemPosition = MenuItemPosition.Middle,
-                                text = getString(R.string.settings_menu_translation_close_delay),
-                                paddingValues = paddingValues,
-                                onTextPositioned = { offset ->
-                                    translationCloseDelayTextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                subText = getSecondValueText(translationCloseDelay),
-                                onSubtextPositioned = { offset ->
-                                    translationCloseDelaySubtextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                onClick = {
-                                    coroutineScope.launch {
-                                        settingStringFlow.value = getSecondValueText(translationCloseDelay)
-                                        SliderDialogView.INSTANCE.cast(
-                                            applicationContext = applicationContext,
-                                            initialValue = translationCloseDelay.toFloat(),
-                                            valueRange = 500.0f..7000.0f,
-                                            steps = 12,
-                                            onValueChange = { value ->
-                                                viewModel.updateTranslationCloseDelay(value.toLong())
-                                                settingStringFlow.value = getSecondValueText(value.toLong())
-                                            },
-                                            menuText = Pair(getString(R.string.settings_menu_translation_close_delay), translationCloseDelayTextOffset.value),
-                                            menuSubtext = Pair(settingStringFlow, translationCloseDelaySubtextOffset.value),
-                                            onDismissRequest = {
-                                                SliderDialogView.INSTANCE.clear()
-                                            },
-                                        )
-                                    }
-                                }
-                            )
-
-                            MenuItem(
-                                menuItemPosition = MenuItemPosition.Middle,
-                                onClick = {
-                                    viewModel.updateAutomaticTranslationPlayback(!automaticTranslationPlayback)
-                                }
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    MenuText(
-                                        text = getString(R.string.settings_menu_automated_read_aloud),
-                                    )
-                                    Switch(
-                                        checked = automaticTranslationPlayback,
-                                        onCheckedChange = { value ->
-                                            viewModel.updateAutomaticTranslationPlayback(value)
-                                        },
-                                        colors = SwitchDefaults.colors(
-                                            checkedThumbColor = switchThumbColor,
-                                            checkedTrackColor = switchTrackColor
-                                        ),
-                                        modifier = Modifier
-                                            .scale(switchScale)
-                                            .align(Alignment.CenterVertically)
-                                            .semantics {
-                                                contentDescription = if (automaticTranslationPlayback) {
-                                                    "Automated read aloud on"
-                                                } else {
-                                                    "Automated read aloud off"
-                                                }
-                                            },
-                                    )
-                                }
-                            }
-
-                            MenuTextItem(
-                                menuItemPosition = MenuItemPosition.Bottom,
-                                text = getString(R.string.settings_menu_reply_transparency),
-                                paddingValues = paddingValues,
-                                onTextPositioned = { offset ->
-                                    replyTransparencyTextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                subText = getTransparencyValueText(replyTransparency),
-                                onSubtextPositioned = { offset ->
-                                    replyTransparencySubtextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                onClick = {
-                                    coroutineScope.launch {
-                                        settingStringFlow.value = getTransparencyValueText(replyTransparency)
-                                        SliderDialogView.INSTANCE.cast(
-                                            applicationContext = applicationContext,
-                                            initialValue = 1.0f - replyTransparency,
-                                            valueRange = 0.0f..0.5f,
-                                            onValueChange = { value ->
-                                                viewModel.updateReplyTransparency(1.0f - value)
-                                                settingStringFlow.value = getTransparencyValueText(1.0f - value)
-                                            },
-                                            menuText = Pair(getString(R.string.settings_menu_reply_transparency), replyTransparencyTextOffset.value),
-                                            menuSubtext = Pair(settingStringFlow, replyTransparencySubtextOffset.value),
-                                            onDismissRequest = {
-                                                SliderDialogView.INSTANCE.clear()
-                                            },
-                                        )
-                                    }
-                                }
-                            )
-
-                            MenuCategory(
-                                icon = Icons.Default.VoiceChat,
-                                categoryName = getString(R.string.settings_menu_cat_tts),
-                                isRtl = isRtl,
-                            )
-
-                            MenuTextItem(
-                                menuItemPosition = MenuItemPosition.Top,
-                                text = getString(R.string.settings_menu_tts_engine),
-                                paddingValues = paddingValues,
-                                subText = ttsAvailableEngines.firstOrNull { it.packageName == ttsCurrentEnginePackage }?.label
-                                    ?: ttsCurrentEnginePackage.takeIf { it.isNotBlank() }
-                                    ?: "Loading...",
-                                onClick = {
-                                    if (ttsAvailableEngines.isNotEmpty()) {
-                                        showTtsEngineDialog = true
-                                    } else {
-                                        viewModel.ttsRepository.refreshAvailableEngines()
-                                    }
-                                }
-                            )
-
-                            MenuTextItem(
-                                menuItemPosition = MenuItemPosition.Middle,
-                                text = getString(R.string.settings_menu_tts_language),
-                                paddingValues = paddingValues,
-                                subText = ttsSelectedLanguage?.displayName
-                                    ?: ttsSelectedLanguageTag.takeIf { it.isNotBlank() }
-                                    ?: "Loading...",
-                                onClick = {
-                                    if (ttsAvailableLanguages.isNotEmpty()) {
-                                        showTtsLanguageDialog = true
-                                    }
-                                }
-                            )
-
-                            MenuTextItem(
-                                menuItemPosition = MenuItemPosition.Middle,
-                                text = getString(R.string.settings_menu_tts_voices),
-                                paddingValues = paddingValues,
-                                subText = ttsSelectedVoice?.name
-                                    ?: savedTtsVoiceName.takeIf { it.isNotBlank() }
-                                    ?: "Loading...",
-                                onClick = {
-                                    if (ttsVoicesForSelectedLanguage.isNotEmpty()) {
-                                        showTtsVoiceDialog = true
-                                    }
-                                }
-                            )
-
-                            MenuTextItem(
-                                menuItemPosition = MenuItemPosition.Middle,
-                                text = getString(R.string.settings_menu_tts_rate),
-                                paddingValues = paddingValues,
-                                onTextPositioned = { offset ->
-                                    ttsSpeechRateTextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                subText = formatTtsRateValue(ttsSpeechRate),
-                                onSubtextPositioned = { offset ->
-                                    ttsSpeechRateSubtextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                onClick = {
-                                    coroutineScope.launch {
-                                        settingFloatFlow.value = ttsSpeechRate
-                                        settingStringFlow.value = formatTtsRateValue(ttsSpeechRate)
-                                        SliderDialogView.INSTANCE.cast(
-                                            applicationContext = applicationContext,
-                                            initialValue = ttsSpeechRate,
-                                            valueRange = 0.5f..5.0f,
-                                            steps = 8,
-                                            onValueChange = { value ->
-                                                val snappedValue = snapToStep(
-                                                    value = value,
-                                                    step = 0.5f,
-                                                    min = 0.5f,
-                                                    max = 5.0f,
-                                                )
-                                                viewModel.updateTtsSpeechRate(snappedValue)
-                                                settingFloatFlow.value = snappedValue
-                                                settingStringFlow.value = formatTtsRateValue(snappedValue)
-                                            },
-                                            menuText = Pair(getString(R.string.settings_menu_tts_rate), ttsSpeechRateTextOffset.value),
-                                            menuSubtext = Pair(settingStringFlow, ttsSpeechRateSubtextOffset.value),
-                                            playDefaultSample = true,
-                                            onDismissRequest = {
-                                                SliderDialogView.INSTANCE.clear()
-                                            },
-                                        )
-                                    }
-                                }
-                            )
-
-                            MenuTextItem(
-                                menuItemPosition = MenuItemPosition.Bottom,
-                                text = getString(R.string.settings_menu_tts_pitch),
-                                paddingValues = paddingValues,
-                                onTextPositioned = { offset ->
-                                    ttsPitchTextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                subText = formatSingleDecimal(ttsPitch),
-                                onSubtextPositioned = { offset ->
-                                    ttsPitchSubtextOffset.value = Point(offset.x - startPadding, offset.y)
-                                },
-                                onClick = {
-                                    coroutineScope.launch {
-                                        settingFloatFlow.value = ttsPitch
-                                        settingStringFlow.value = formatSingleDecimal(ttsPitch)
-                                        SliderDialogView.INSTANCE.cast(
-                                            applicationContext = applicationContext,
-                                            initialValue = ttsPitch,
-                                            valueRange = 0.5f..2.0f,
-                                            steps = 0,
-                                            onValueChange = { value ->
-                                                val snappedValue = snapToStep(
-                                                    value = value,
-                                                    step = 0.2f,
-                                                    min = 0.5f,
-                                                    max = 2.0f,
-                                                )
-                                                viewModel.updateTtsPitch(snappedValue)
-                                                settingFloatFlow.value = snappedValue
-                                                settingStringFlow.value = formatSingleDecimal(snappedValue)
-                                            },
-                                            menuText = Pair(getString(R.string.settings_menu_tts_pitch), ttsPitchTextOffset.value),
-                                            menuSubtext = Pair(settingStringFlow, ttsPitchSubtextOffset.value),
-                                            playDefaultSample = true,
-                                            onDismissRequest = {
-                                                SliderDialogView.INSTANCE.clear()
-                                            },
-                                        )
-                                    }
-                                }
-                            )
-
-                            MenuCategory(
-                                icon = Icons.Outlined.Info,
-                                categoryName = getString(R.string.settings_menu_cat_about),
-                                isRtl = isRtl,
-                            )
-
-                            MenuItem(
-                                menuItemPosition = MenuItemPosition.Single,
-                                onClick = {
-                                    context.gotoStore(
-                                        newTask = false,
-                                        finishService = false
-                                    )
-                                    viewModel.analyticsRepository.screenViewReport("AppVersion")
-                                },
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 50.dp)
-                                        .padding(end = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    MenuText(
-                                        text = getString(R.string.settings_menu_app_version),
-                                    )
-                                    if (latestVersionCode > versionCode) {
-                                        Row(
-                                            modifier = Modifier.wrapContentSize(),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                        ) {
-                                            MenuSubText(
-                                                text = "${packageInfo.versionName}",
-                                                paddingValues = paddingValues
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            Icon(
-                                                imageVector = Icons.Default.FiberNew,
-                                                contentDescription = "new version",
-                                                modifier = Modifier
-                                                    .size(32.dp)
-                                                    .padding(end = 8.dp),
-                                                tint = Color(0xFF446987)
-                                            )
-                                        }
-                                    } else {
-                                        MenuSubText(
-                                            text = "${packageInfo.versionName}  ${getString(R.string.settings_menu_app_version_latest)}",
-                                            paddingValues = paddingValues
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
                         }
                     }
                 }
+
+                SectionCard(
+                    painter = painterResource(id = R.drawable.ic_menubar),
+                    categoryName = getString(R.string.settings_menu_cat_menubar),
+                    iconSize = 20.dp,
+                    isRtl = isRtl,
+                    modifier = Modifier.padding(bottom = sectionSpacing)
+                ) {
+                    MenuTextItem(
+                        menuItemPosition = if (menuBarVisibility) MenuItemPosition.Top else MenuItemPosition.Single,
+                        text = getString(R.string.settings_menu_menubar_transparency),
+                        paddingValues = paddingValues,
+                        onTextPositioned = { offset ->
+                            menuBarTransparencyTextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        subText = if ((1.0f - menuBarTransparency) > 0.49f) {
+                            context.getString(android.R.string.cancel)
+                        } else {
+                            getTransparencyValueText(menuBarTransparency)
+                        },
+                        onSubtextPositioned = { offset ->
+                            menuBarTransparencySubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        onClick = {
+                            coroutineScope.launch {
+                                settingStringFlow.value = getTransparencyValueText(menuBarTransparency)
+                                SliderDialogView.INSTANCE.cast(
+                                    applicationContext = applicationContext,
+                                    initialValue = 1.0f - menuBarTransparency,
+                                    valueRange = 0.0f..0.50f,
+                                    onValueChange = { value ->
+                                        viewModel.updateMenuBarTransparency(1.0f - value)
+                                        viewModel.updateMenuBarVisibility(value < 0.5f)
+                                        settingStringFlow.value = getTransparencyValueText(1.0f - value)
+                                    },
+                                    menuText = Pair(getString(R.string.settings_menu_menubar_transparency), menuBarTransparencyTextOffset.value),
+                                    menuBarVisibilityText = Pair(settingStringFlow, menuBarTransparencySubtextOffset.value),
+                                    onDismissRequest = {
+                                        SliderDialogView.INSTANCE.clear()
+                                    },
+                                )
+                            }
+                        }
+                    )
+
+                    AnimatedVisibility(
+                        visible = menuBarVisibility,
+                        enter = expandVertically(animationSpec = tween(menuExpandAnimationDuration)),
+                        exit = shrinkVertically(animationSpec = tween(menuExpandAnimationDuration)),
+                    ) {
+                        fun onClick() {
+                            coroutineScope.launch {
+                                settingStringFlow.value = menuBarConfig.name
+                                SliderDialogView.INSTANCE.cast(
+                                    applicationContext = applicationContext,
+                                    initialValue = when (menuBarConfig) {
+                                        MenuConfig.WHOLE -> 0.0f
+                                        MenuConfig.DETECT_MODE_LANGUAGE -> 1.0f
+                                        MenuConfig.LANGUAGE_TRANSLATION_KIT -> 2.0f
+                                        MenuConfig.LANGUAGE -> 3.0f
+                                        MenuConfig.WHOLE_SHORT -> 4.0f
+                                        MenuConfig.DETECT_MODE_LANGUAGE_SHORT -> 5.0f
+                                        MenuConfig.LANGUAGE_SHORT_TRANSLATION_KIT -> 6.0f
+                                        MenuConfig.LANGUAGE_SHORT -> 7.0f
+                                        MenuConfig.DETECT_MODE_TRANSLATION_KIT -> 8.0f
+                                        MenuConfig.DETECT_MODE -> 9.0f
+                                        MenuConfig.TRANSLATION_KIT -> 10.0f
+                                        MenuConfig.V_DETECT_MODE -> 11.0f
+                                        MenuConfig.V_DETECT_MODE_TRANSLATION_KIT -> 12.0f
+                                        MenuConfig.V_LANGUAGE -> 13.0f
+                                        MenuConfig.V_LANGUAGE_TRANSLATION_KIT -> 14.0f
+                                        MenuConfig.V_DETECT_MODE_LANGUAGE -> 15.0f
+                                        MenuConfig.V_WHOLE -> 16.0f
+                                    },
+                                    valueRange = 0.0f..16.0f,
+                                    steps = 15,
+                                    onValueChange = { value ->
+                                        val updatedMenuBarConfig = when (value.roundToInt().toFloat()) {
+                                            0.0f -> MenuConfig.WHOLE
+                                            1.0f -> MenuConfig.DETECT_MODE_LANGUAGE
+                                            2.0f -> MenuConfig.LANGUAGE_TRANSLATION_KIT
+                                            3.0f -> MenuConfig.LANGUAGE
+                                            4.0f -> MenuConfig.WHOLE_SHORT
+                                            5.0f -> MenuConfig.DETECT_MODE_LANGUAGE_SHORT
+                                            6.0f -> MenuConfig.LANGUAGE_SHORT_TRANSLATION_KIT
+                                            7.0f -> MenuConfig.LANGUAGE_SHORT
+                                            8.0f -> MenuConfig.DETECT_MODE_TRANSLATION_KIT
+                                            9.0f -> MenuConfig.DETECT_MODE
+                                            10.0f -> MenuConfig.TRANSLATION_KIT
+                                            11.0f -> MenuConfig.V_DETECT_MODE
+                                            12.0f -> MenuConfig.V_DETECT_MODE_TRANSLATION_KIT
+                                            13.0f -> MenuConfig.V_LANGUAGE
+                                            14.0f -> MenuConfig.V_LANGUAGE_TRANSLATION_KIT
+                                            15.0f -> MenuConfig.V_DETECT_MODE_LANGUAGE
+                                            16.0f -> MenuConfig.V_WHOLE
+                                            else -> MenuConfig.WHOLE
+                                        }
+                                        viewModel.updateMenuBarConfig(updatedMenuBarConfig)
+                                        settingStringFlow.value = updatedMenuBarConfig.name
+                                    },
+                                    menuText = Pair(getString(R.string.settings_menu_menubar_composition), menuBarConfigTextOffset.value),
+                                    menuBarConfigText = Pair(settingStringFlow, menuBarConfigSubOffset.value),
+                                    onDismissRequest = {
+                                        SliderDialogView.INSTANCE.clear()
+                                    },
+                                )
+                            }
+                        }
+
+                        MenuItem(
+                            menuItemPosition = MenuItemPosition.Bottom,
+                            onClick = { onClick() }
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = rowMinHeight + 14.dp)
+                                    .onGloballyPositioned { layoutCoordinates ->
+                                        val offset = layoutCoordinates.positionOnScreen()
+                                        val rowStartPadding = paddingValues.calculateLeftPadding(layoutDirection).toPx(context)
+                                        val posX = offset.x.toInt() + layoutCoordinates.size.width - rowStartPadding
+                                        menuBarConfigSubOffset.value = Point(posX, offset.y.toInt())
+                                    },
+                            ) {
+                                MenuText(
+                                    text = getString(R.string.settings_menu_menubar_composition),
+                                    onTextPositioned = { offset ->
+                                        menuBarConfigTextOffset.value = Point(offset.x - startPadding, offset.y)
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .padding(top = 6.dp)
+                                )
+                                val scaleFactor = 0.44f
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .padding(top = 6.dp, bottom = 6.dp)
+                                        .wrapContentSize()
+                                        .layout { measurable, constraints ->
+                                            val placeable = measurable.measure(constraints)
+                                            val width = (placeable.width * scaleFactor).toInt()
+                                            val height = (placeable.height * scaleFactor).toInt()
+                                            layout(width, height) {
+                                                placeable.placeRelative(0, 0)
+                                            }
+                                        }
+                                ) {
+                                    MenuBar(
+                                        menuConfig = menuBarConfig,
+                                        scaleFactor = scaleFactor,
+                                        shadowPadding = 0.dp,
+                                        borderWidth = 1.2.dp,
+                                        textDetectMode = textDetectMode,
+                                        sourceLanguageCode = sourceLanguageCode,
+                                        sourceLanguage = sourceLanguage,
+                                        targetLanguageCode = targetLanguageCode,
+                                        targetLanguage = targetLanguage,
+                                        translationKitType = kitType,
+                                        isSwappable = { sourceLanguageCode, targetLanguageCode, kitType ->
+                                            viewModel.isLanguageSwappable(sourceLanguageCode, targetLanguageCode, kitType)
+                                        },
+                                        modifier = Modifier.semantics {
+                                            contentDescription = "Menu composition"
+                                        }
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .clickable(
+                                                onClick = { onClick() },
+                                                indication = null,
+                                                interactionSource = remember { MutableInteractionSource() }
+                                            )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                SectionCard(
+                    painter = painterResource(id = R.drawable.ic_ai),
+                    categoryName = getString(R.string.settings_menu_cat_ai),
+                    iconSize = 20.dp,
+                    isRtl = isRtl,
+                    modifier = Modifier.padding(bottom = sectionSpacing)
+                ) {
+                    MenuItem(
+                        menuItemPosition = MenuItemPosition.Single,
+                        onClick = { viewModel.updateUseCorrectionKit(!useCorrectionKit) }
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            MenuText(text = "ChatGPT")
+                            SettingsSwitchControl(
+                                checked = useCorrectionKit,
+                                onCheckedChange = { value -> viewModel.updateUseCorrectionKit(value) },
+                                onContentDescription = "ChatGPT text correction on",
+                                offContentDescription = "ChatGPT text correction off"
+                            )
+                        }
+                    }
+                }
+
+                SectionCard(
+                    painter = painterResource(id = R.drawable.ic_translation_window),
+                    categoryName = getString(R.string.settings_menu_cat_translation),
+                    iconSize = 20.dp,
+                    isRtl = isRtl,
+                    modifier = Modifier.padding(bottom = sectionSpacing)
+                ) {
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Top,
+                        text = getString(R.string.settings_menu_translation_transparency),
+                        paddingValues = paddingValues,
+                        onTextPositioned = { offset ->
+                            translationTransparencyTextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        onGloballyPositioned = { layoutCoordinates ->
+                            val center = layoutCoordinates.boundsInWindow().center
+                            val rowStartPadding = paddingValues.calculateLeftPadding(layoutDirection).toPx(context)
+                            val posX = center.x.toInt() - rowStartPadding
+                            translationPoint.value = Point(posX, center.y.toInt())
+                        },
+                        subText = getTransparencyValueText(translationTransparency),
+                        onSubtextPositioned = { offset ->
+                            translationTransparencySubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        onClick = {
+                            if (CaptureRepository.mediaProjectionToken == null) {
+                                val intent = Intent(context, ScreenCapturePermissionRequesterActivity::class.java)
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                context.startActivity(intent)
+                            } else {
+                                runTranslation(translationPoint.value, textDetectMode)
+                                coroutineScope.launch {
+                                    settingStringFlow.value = getTransparencyValueText(translationTransparency)
+                                    SliderDialogView.INSTANCE.cast(
+                                        applicationContext = applicationContext,
+                                        initialValue = 1.0f - translationTransparency,
+                                        valueRange = 0.0f..0.5f,
+                                        onValueChange = { value ->
+                                            viewModel.updateTranslationTransparency(1.0f - value)
+                                            settingStringFlow.value = getTransparencyValueText(1.0f - value)
+                                        },
+                                        menuText = Pair(getString(R.string.settings_menu_translation_transparency), translationTransparencyTextOffset.value),
+                                        menuSubtext = Pair(settingStringFlow, translationTransparencySubtextOffset.value),
+                                        onDismissRequest = {
+                                            closeTranslation()
+                                            SliderDialogView.INSTANCE.clear()
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    )
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Middle,
+                        text = getString(R.string.settings_menu_translation_close_delay),
+                        paddingValues = paddingValues,
+                        onTextPositioned = { offset ->
+                            translationCloseDelayTextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        subText = getSecondValueText(translationCloseDelay),
+                        onSubtextPositioned = { offset ->
+                            translationCloseDelaySubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        onClick = {
+                            coroutineScope.launch {
+                                settingStringFlow.value = getSecondValueText(translationCloseDelay)
+                                SliderDialogView.INSTANCE.cast(
+                                    applicationContext = applicationContext,
+                                    initialValue = translationCloseDelay.toFloat(),
+                                    valueRange = 500.0f..7000.0f,
+                                    steps = 12,
+                                    onValueChange = { value ->
+                                        viewModel.updateTranslationCloseDelay(value.toLong())
+                                        settingStringFlow.value = getSecondValueText(value.toLong())
+                                    },
+                                    menuText = Pair(getString(R.string.settings_menu_translation_close_delay), translationCloseDelayTextOffset.value),
+                                    menuSubtext = Pair(settingStringFlow, translationCloseDelaySubtextOffset.value),
+                                    onDismissRequest = {
+                                        SliderDialogView.INSTANCE.clear()
+                                    },
+                                )
+                            }
+                        }
+                    )
+                    MenuItem(
+                        menuItemPosition = MenuItemPosition.Middle,
+                        onClick = { viewModel.updateAutomaticTranslationPlayback(!automaticTranslationPlayback) }
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            MenuText(text = getString(R.string.settings_menu_automated_read_aloud))
+                            SettingsSwitchControl(
+                                checked = automaticTranslationPlayback,
+                                onCheckedChange = { value -> viewModel.updateAutomaticTranslationPlayback(value) },
+                                onContentDescription = "Automated read aloud on",
+                                offContentDescription = "Automated read aloud off"
+                            )
+                        }
+                    }
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Bottom,
+                        text = getString(R.string.settings_menu_reply_transparency),
+                        paddingValues = paddingValues,
+                        onTextPositioned = { offset ->
+                            replyTransparencyTextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        subText = getTransparencyValueText(replyTransparency),
+                        onSubtextPositioned = { offset ->
+                            replyTransparencySubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        onClick = {
+                            coroutineScope.launch {
+                                settingStringFlow.value = getTransparencyValueText(replyTransparency)
+                                SliderDialogView.INSTANCE.cast(
+                                    applicationContext = applicationContext,
+                                    initialValue = 1.0f - replyTransparency,
+                                    valueRange = 0.0f..0.5f,
+                                    onValueChange = { value ->
+                                        viewModel.updateReplyTransparency(1.0f - value)
+                                        settingStringFlow.value = getTransparencyValueText(1.0f - value)
+                                    },
+                                    menuText = Pair(getString(R.string.settings_menu_reply_transparency), replyTransparencyTextOffset.value),
+                                    menuSubtext = Pair(settingStringFlow, replyTransparencySubtextOffset.value),
+                                    onDismissRequest = {
+                                        SliderDialogView.INSTANCE.clear()
+                                    },
+                                )
+                            }
+                        }
+                    )
+                }
+
+                SectionCard(
+                    icon = Icons.Default.VoiceChat,
+                    categoryName = getString(R.string.settings_menu_cat_tts),
+                    iconSize = 19.dp,
+                    isRtl = isRtl,
+                    modifier = Modifier.padding(bottom = sectionSpacing)
+                ) {
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Top,
+                        text = getString(R.string.settings_menu_tts_engine),
+                        paddingValues = paddingValues,
+                        subText = ttsAvailableEngines.firstOrNull { it.packageName == ttsCurrentEnginePackage }?.label
+                            ?: ttsCurrentEnginePackage.takeIf { it.isNotBlank() }
+                            ?: "Loading...",
+                        onClick = {
+                            if (ttsAvailableEngines.isNotEmpty()) {
+                                showTtsEngineDialog = true
+                            } else {
+                                viewModel.ttsRepository.refreshAvailableEngines()
+                            }
+                        }
+                    )
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Middle,
+                        text = getString(R.string.settings_menu_tts_language),
+                        paddingValues = paddingValues,
+                        subText = ttsSelectedLanguage?.displayName
+                            ?: ttsSelectedLanguageTag.takeIf { it.isNotBlank() }
+                            ?: "Loading...",
+                        onClick = {
+                            if (ttsAvailableLanguages.isNotEmpty()) {
+                                showTtsLanguageDialog = true
+                            }
+                        }
+                    )
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Middle,
+                        text = getString(R.string.settings_menu_tts_voices),
+                        paddingValues = paddingValues,
+                        subText = ttsSelectedVoice?.name
+                            ?: savedTtsVoiceName.takeIf { it.isNotBlank() }
+                            ?: "Loading...",
+                        onClick = {
+                            if (ttsVoicesForSelectedLanguage.isNotEmpty()) {
+                                showTtsVoiceDialog = true
+                            }
+                        }
+                    )
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Middle,
+                        text = getString(R.string.settings_menu_tts_rate),
+                        paddingValues = paddingValues,
+                        onTextPositioned = { offset ->
+                            ttsSpeechRateTextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        subText = formatTtsRateValue(ttsSpeechRate),
+                        onSubtextPositioned = { offset ->
+                            ttsSpeechRateSubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        onClick = {
+                            coroutineScope.launch {
+                                settingFloatFlow.value = ttsSpeechRate
+                                settingStringFlow.value = formatTtsRateValue(ttsSpeechRate)
+                                SliderDialogView.INSTANCE.cast(
+                                    applicationContext = applicationContext,
+                                    initialValue = ttsSpeechRate,
+                                    valueRange = 0.5f..5.0f,
+                                    steps = 8,
+                                    onValueChange = { value ->
+                                        val snappedValue = snapToStep(
+                                            value = value,
+                                            step = 0.5f,
+                                            min = 0.5f,
+                                            max = 5.0f,
+                                        )
+                                        viewModel.updateTtsSpeechRate(snappedValue)
+                                        settingFloatFlow.value = snappedValue
+                                        settingStringFlow.value = formatTtsRateValue(snappedValue)
+                                    },
+                                    menuText = Pair(getString(R.string.settings_menu_tts_rate), ttsSpeechRateTextOffset.value),
+                                    menuSubtext = Pair(settingStringFlow, ttsSpeechRateSubtextOffset.value),
+                                    playDefaultSample = true,
+                                    onDismissRequest = {
+                                        SliderDialogView.INSTANCE.clear()
+                                    },
+                                )
+                            }
+                        }
+                    )
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Bottom,
+                        text = getString(R.string.settings_menu_tts_pitch),
+                        paddingValues = paddingValues,
+                        onTextPositioned = { offset ->
+                            ttsPitchTextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        subText = formatSingleDecimal(ttsPitch),
+                        onSubtextPositioned = { offset ->
+                            ttsPitchSubtextOffset.value = Point(offset.x - startPadding, offset.y)
+                        },
+                        onClick = {
+                            coroutineScope.launch {
+                                settingFloatFlow.value = ttsPitch
+                                settingStringFlow.value = formatSingleDecimal(ttsPitch)
+                                SliderDialogView.INSTANCE.cast(
+                                    applicationContext = applicationContext,
+                                    initialValue = ttsPitch,
+                                    valueRange = 0.5f..2.0f,
+                                    steps = 0,
+                                    onValueChange = { value ->
+                                        val snappedValue = snapToStep(
+                                            value = value,
+                                            step = 0.2f,
+                                            min = 0.5f,
+                                            max = 2.0f,
+                                        )
+                                        viewModel.updateTtsPitch(snappedValue)
+                                        settingFloatFlow.value = snappedValue
+                                        settingStringFlow.value = formatSingleDecimal(snappedValue)
+                                    },
+                                    menuText = Pair(getString(R.string.settings_menu_tts_pitch), ttsPitchTextOffset.value),
+                                    menuSubtext = Pair(settingStringFlow, ttsPitchSubtextOffset.value),
+                                    playDefaultSample = true,
+                                    onDismissRequest = {
+                                        SliderDialogView.INSTANCE.clear()
+                                    },
+                                )
+                            }
+                        }
+                    )
+                }
+
+                SectionCard(
+                    icon = Icons.Outlined.Info,
+                    categoryName = getString(R.string.settings_menu_cat_about),
+                    iconSize = 18.dp,
+                    isRtl = isRtl,
+                    modifier = Modifier.padding(bottom = sectionSpacing)
+                ) {
+                    MenuTextItem(
+                        menuItemPosition = MenuItemPosition.Single,
+                        text = getString(R.string.settings_menu_app_version),
+                        paddingValues = paddingValues,
+                        subText = if (latestVersionCode > versionCode) {
+                            "${packageInfo.versionName} New"
+                        } else {
+                            "${packageInfo.versionName} ${getString(R.string.settings_menu_app_version_latest)}"
+                        },
+                        onClick = {
+                            context.gotoStore(
+                                newTask = false,
+                                finishService = false
+                            )
+                            viewModel.analyticsRepository.screenViewReport("AppVersion")
+                        },
+                        showChevron = false
+                    )
+                }
+                }
             }
+        }
     }
 
     @Composable
@@ -1637,11 +1464,27 @@ class SettingsActivity : AVDActivity() {
                 }
             }
         }
+        val isDarkMode = LocalAppDarkTheme.current
+        val containerColor = if (isDarkMode) colorResource(R.color.settings_card_dark) else colorResource(R.color.settings_card_light)
+        val dividerColor = if (isDarkMode) colorResource(R.color.settings_divider_dark) else colorResource(R.color.settings_divider_light)
+        val titleColor = if (isDarkMode) colorResource(R.color.settings_text_primary_dark) else colorResource(R.color.settings_text_primary_light)
+        val supportingColor = if (isDarkMode) colorResource(R.color.settings_text_secondary_dark) else colorResource(R.color.settings_text_secondary_light)
+        val accentColor = colorResource(R.color.settings_accent)
+        val accentSoftColor = if (isDarkMode) colorResource(R.color.settings_accent_soft) else colorResource(R.color.settings_accent_soft_light)
+        val dialogRadius = dimensionResource(R.dimen.settings_dialog_radius)
 
         AlertDialog(
             onDismissRequest = onDismiss,
+            shape = RoundedCornerShape(dialogRadius),
+            containerColor = containerColor,
+            titleContentColor = titleColor,
+            textContentColor = titleColor,
             title = {
-                Text(text = title)
+                Text(
+                    text = title,
+                    color = titleColor,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
             },
             text = {
                 Column(
@@ -1659,7 +1502,18 @@ class SettingsActivity : AVDActivity() {
                             singleLine = true,
                             label = {
                                 Text(text = searchPlaceholder)
-                            }
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = accentColor,
+                                unfocusedBorderColor = dividerColor,
+                                focusedLabelColor = accentColor,
+                                unfocusedLabelColor = supportingColor,
+                                focusedTextColor = titleColor,
+                                unfocusedTextColor = titleColor,
+                                cursorColor = accentColor,
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent
+                            )
                         )
                     }
 
@@ -1673,11 +1527,15 @@ class SettingsActivity : AVDActivity() {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .background(
+                                            color = if (isSelected(option)) accentSoftColor else Color.Transparent,
+                                            shape = RoundedCornerShape(16.dp)
+                                        )
                                         .clickable {
                                             onSelect(option)
                                             onDismiss()
                                         }
-                                        .padding(vertical = 10.dp),
+                                        .padding(horizontal = 6.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     RadioButton(
@@ -1685,7 +1543,11 @@ class SettingsActivity : AVDActivity() {
                                         onClick = {
                                             onSelect(option)
                                             onDismiss()
-                                        }
+                                        },
+                                        colors = androidx.compose.material3.RadioButtonDefaults.colors(
+                                            selectedColor = accentColor,
+                                            unselectedColor = supportingColor
+                                        )
                                     )
                                     Column(
                                         modifier = Modifier
@@ -1694,12 +1556,13 @@ class SettingsActivity : AVDActivity() {
                                     ) {
                                         Text(
                                             text = optionLabel(option),
-                                            style = MaterialTheme.typography.bodyLarge
+                                            color = titleColor,
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
                                         )
                                         Text(
                                             text = optionSupportingText(option),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Color.Gray
+                                            color = supportingColor
                                         )
                                     }
                                     onOptionAction?.let { action ->
@@ -1711,11 +1574,16 @@ class SettingsActivity : AVDActivity() {
                                             Icon(
                                                 imageVector = Icons.Default.PlayArrow,
                                                 contentDescription = optionActionContentDescription(option),
-                                                tint = MaterialTheme.colorScheme.primary
+                                                tint = accentColor
                                             )
                                         }
                                     }
                                 }
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 12.dp),
+                                    thickness = 1.dp,
+                                    color = dividerColor.copy(alpha = 0.55f)
+                                )
                             }
                         }
                     }
@@ -1723,61 +1591,118 @@ class SettingsActivity : AVDActivity() {
             },
             confirmButton = {
                 TextButton(onClick = onDismiss) {
-                    Text(text = stringResource(android.R.string.cancel))
+                    Text(
+                        text = stringResource(android.R.string.cancel),
+                        color = accentColor
+                    )
                 }
             }
         )
     }
 
     @Composable
-    fun MenuCategory(
+    fun SettingsTopBarActionButton(
+        onClick: () -> Unit,
+        content: @Composable () -> Unit,
+    ) {
+        val isDarkMode = LocalAppDarkTheme.current
+        val borderColor = if (isDarkMode) colorResource(R.color.settings_border_dark) else colorResource(R.color.settings_border_light)
+        Box(
+            modifier = Modifier
+                .padding(start = 8.dp)
+                .size(36.dp)
+                .background(Color.Transparent, CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(Color.Transparent, CircleShape)
+            )
+            content()
+        }
+    }
+
+    @Composable
+    fun SectionCard(
         icon: ImageVector? = null,
         painter: Painter? = null,
         iconSize: Dp = 22.dp,
         categoryName: String,
         isRtl: Boolean,
+        modifier: Modifier = Modifier,
+        content: @Composable () -> Unit,
     ) {
-        val isDarkMode = isSystemInDarkTheme()
-        val menuCategoryColor = if (isDarkMode) Color(0xFFb7b7ba) else Color(0xFF626265)
+        val isDarkMode = LocalAppDarkTheme.current
+        val cardRadius = dimensionResource(R.dimen.settings_card_radius)
+        val headerChipSize = dimensionResource(R.dimen.settings_header_chip_size)
+        val cardColor = if (isDarkMode) colorResource(R.color.settings_card_dark) else colorResource(R.color.settings_card_light)
+        val borderColor = if (isDarkMode) colorResource(R.color.settings_border_dark) else colorResource(R.color.settings_border_light)
+        val dividerColor = if (isDarkMode) colorResource(R.color.settings_divider_dark) else colorResource(R.color.settings_divider_light)
+        val titleColor = if (isDarkMode) colorResource(R.color.settings_text_primary_dark) else colorResource(R.color.settings_text_primary_light)
+        val accentColor = colorResource(R.color.settings_accent)
+        val accentSoftColor = if (isDarkMode) colorResource(R.color.settings_accent_soft) else colorResource(R.color.settings_accent_soft_light)
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp)
-                .padding(start = 18.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            color = cardColor,
+            shape = RoundedCornerShape(cardRadius),
+            border = BorderStroke(1.dp, borderColor)
         ) {
-            if (icon != null) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = "$categoryName Icon",
+            Column {
+                Row(
                     modifier = Modifier
-                        .size(iconSize)
-                        .graphicsLayer {
-                            if (isRtl) rotationY = 180f
-                        },
-                    tint = menuCategoryColor
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(headerChipSize)
+                            .background(accentSoftColor, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (icon != null) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = "$categoryName Icon",
+                                modifier = Modifier
+                                    .size(iconSize)
+                                    .graphicsLayer {
+                                        if (isRtl) rotationY = 180f
+                                    },
+                                tint = accentColor
+                            )
+                        }
+                        if (painter != null) {
+                            Image(
+                                modifier = Modifier
+                                    .size(iconSize)
+                                    .graphicsLayer {
+                                        if (isRtl) rotationY = 180f
+                                    },
+                                painter = painter,
+                                contentDescription = "$categoryName Image",
+                                contentScale = ContentScale.Fit,
+                                colorFilter = ColorFilter.tint(accentColor)
+                            )
+                        }
+                    }
+                    Text(
+                        modifier = Modifier.padding(start = 10.dp),
+                        text = categoryName,
+                        color = titleColor,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 17.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                }
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    thickness = 1.dp,
+                    color = dividerColor
                 )
+                content()
             }
-            if (painter != null) {
-                Image(
-                    modifier = Modifier
-                        .size(iconSize)
-                        .graphicsLayer {
-                            if (isRtl) rotationY = 180f
-                        },
-                    painter = painter,
-                    contentDescription = "$categoryName Image",
-                    contentScale = ContentScale.Fit,
-                    colorFilter = ColorFilter.tint(menuCategoryColor)
-                )
-            }
-            Text(
-                modifier = Modifier.padding(start = 8.dp),
-                text = categoryName,
-                color = menuCategoryColor,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 14.sp, fontWeight = FontWeight.Bold),
-            )
         }
     }
 
@@ -1787,50 +1712,36 @@ class SettingsActivity : AVDActivity() {
         onClick: (() -> Unit)? = null,
         composable: @Composable () -> Unit,
     ) {
-        val cornerRound = 32.dp
-        val shape = when (menuItemPosition) {
-            MenuItemPosition.Single -> RoundedCornerShape(cornerRound)
-            MenuItemPosition.Top -> RoundedCornerShape(topStart = cornerRound, topEnd = cornerRound)
-            MenuItemPosition.Middle -> RoundedCornerShape(0.dp)
-            MenuItemPosition.Bottom -> RoundedCornerShape(bottomStart = cornerRound, bottomEnd = cornerRound)
-        }
+        val isDarkMode = LocalAppDarkTheme.current
+        val dividerColor = if (isDarkMode) colorResource(R.color.settings_divider_dark) else colorResource(R.color.settings_divider_light)
+        val rowMinHeight = dimensionResource(R.dimen.settings_row_min_height)
+        val interactionSource = remember { MutableInteractionSource() }
 
-        val isDarkMode = isSystemInDarkTheme()
-        val backgroundColor = if (isDarkMode) Color(0xFF171717) else Color(0xFFfafafa)
-        val dividerColor = if (isDarkMode) Color(0xFF343434) else Color(0xFFd5d5d5)
-        val buttonColor = if (isDarkMode) Color(0xFFfafafa) else Color(0xFF171717)
-
-        Box(
-            modifier = Modifier
-                .wrapContentSize()
-                .background(
-                    color = backgroundColor,
-                    shape = shape
-                )
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             if (menuItemPosition == MenuItemPosition.Middle || menuItemPosition == MenuItemPosition.Bottom) {
                 HorizontalDivider(
-                    modifier = Modifier.padding(horizontal = 18.dp),
-                    thickness = 0.7.dp,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                    thickness = 1.dp,
                     color = dividerColor
                 )
             }
 
-            Button(
-                enabled = onClick != null,
-                onClick = {
-                    onClick?.invoke()
-                },
-                colors = ButtonDefaults.textButtonColors(contentColor = buttonColor),
-                shape = shape,
+            Box(
                 modifier = Modifier
-                    .wrapContentSize(),
+                    .fillMaxWidth()
+                    .clickable(
+                        enabled = onClick != null,
+                        interactionSource = interactionSource,
+                        indication = null
+                    ) {
+                        onClick?.invoke()
+                    }
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 50.dp)
-                        .padding(top = 5.dp, bottom = 5.dp, start = 5.dp, end = 0.dp),
+                        .heightIn(min = rowMinHeight),
                 ) {
                     composable()
                 }
@@ -1848,7 +1759,8 @@ class SettingsActivity : AVDActivity() {
         subText: String? = null,
         onSubtextPositioned: ((Point) -> Unit)? = null,
         onClick: (() -> Unit)? = null,
-        menuTextModifier: Modifier = Modifier
+        menuTextModifier: Modifier = Modifier,
+        showChevron: Boolean = onClick != null,
     ) {
         MenuItem(
             menuItemPosition = menuItemPosition,
@@ -1857,7 +1769,7 @@ class SettingsActivity : AVDActivity() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 50.dp),
+                    .heightIn(min = dimensionResource(R.dimen.settings_row_min_height)),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -1865,14 +1777,29 @@ class SettingsActivity : AVDActivity() {
                     text = text,
                     onGloballyPositioned = onGloballyPositioned,
                     onTextPositioned = onTextPositioned,
-                    modifier = menuTextModifier
+                    modifier = menuTextModifier.weight(1f)
                 )
-                subText?.let {
-                    MenuSubText(
-                        text = it,
-                        paddingValues = paddingValues,
-                        onSubtextPositioned = onSubtextPositioned
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    subText?.let {
+                        MenuSubText(
+                            text = it,
+                            paddingValues = paddingValues,
+                            onSubtextPositioned = onSubtextPositioned
+                        )
+                    }
+                    if (showChevron) {
+                        val chevronTint = if (LocalAppDarkTheme.current) {
+                            colorResource(R.color.settings_text_secondary_dark)
+                        } else {
+                            colorResource(R.color.settings_text_secondary_light)
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = chevronTint
+                        )
+                    }
                 }
             }
         }
@@ -1885,14 +1812,19 @@ class SettingsActivity : AVDActivity() {
         onGloballyPositioned: ((LayoutCoordinates) -> Unit)? = null,
         onTextPositioned: ((Point) -> Unit)? = null,
     ) {
-        val isDarkMode = isSystemInDarkTheme()
-        val textColor = if (isDarkMode) Color(0xFFfcfcfc) else Color(0xFF010000)
+        val isDarkMode = LocalAppDarkTheme.current
+        val textColor = if (isDarkMode) colorResource(R.color.settings_text_primary_dark) else colorResource(R.color.settings_text_primary_light)
         val fontSize = fontDimensionResource(R.dimen.settings_menu_text_size)
 
         Text(
             text = text,
             color = textColor,
-            style = MaterialTheme.typography.bodyLarge.copy(fontSize = fontSize),
+            style = MaterialTheme.typography.bodyLarge.copy(
+                fontSize = fontSize,
+                fontWeight = FontWeight.Medium
+            ),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = modifier.onGloballyPositioned { layoutCoordinates ->
                 onGloballyPositioned?.let { it(layoutCoordinates) }
                 val offset = layoutCoordinates.positionOnScreen()
@@ -1908,14 +1840,13 @@ class SettingsActivity : AVDActivity() {
         onSubtextPositioned: ((Point) -> Unit)? = null,
     ) {
         val context = LocalContext.current
-        val isDarkMode = isSystemInDarkTheme()
         val layoutDirection = LocalLayoutDirection.current
-        val subTextColor = if (isDarkMode) Color(0xFFb7b7ba) else Color(0xFF626265)
+        val subTextColor = colorResource(R.color.settings_accent)
         val fontSize = fontDimensionResource(R.dimen.settings_menu_subtext_size)
 
         Text(
             modifier = Modifier
-                .padding(end = 6.dp)
+                .padding(end = 4.dp)
                 .onGloballyPositioned { layoutCoordinates ->
                     val offset = layoutCoordinates.positionOnScreen()
                     val startPadding = paddingValues
@@ -1926,8 +1857,45 @@ class SettingsActivity : AVDActivity() {
                 },
             text = text,
             color = subTextColor,
-            style = MaterialTheme.typography.bodyMedium.copy(fontSize = fontSize),
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = fontSize,
+                fontWeight = FontWeight.SemiBold
+            ),
         )
+    }
 
+    @Composable
+    fun SettingsSwitchControl(
+        checked: Boolean,
+        onCheckedChange: (Boolean) -> Unit,
+        onContentDescription: String,
+        offContentDescription: String,
+    ) {
+        val isDarkMode = LocalAppDarkTheme.current
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = colorResource(R.color.settings_switch_thumb),
+                uncheckedThumbColor = colorResource(R.color.settings_switch_thumb),
+                checkedTrackColor = if (isDarkMode) {
+                    colorResource(R.color.settings_switch_checked_track_dark)
+                } else {
+                    colorResource(R.color.settings_switch_checked_track)
+                },
+                uncheckedTrackColor = if (isDarkMode) {
+                    colorResource(R.color.settings_switch_unchecked_track_dark)
+                } else {
+                    colorResource(R.color.settings_switch_unchecked_track)
+                },
+                checkedBorderColor = Color.Transparent,
+                uncheckedBorderColor = Color.Transparent
+            ),
+            modifier = Modifier
+                .scale(0.82f)
+                .semantics {
+                    contentDescription = if (checked) onContentDescription else offContentDescription
+                }
+        )
     }
 }

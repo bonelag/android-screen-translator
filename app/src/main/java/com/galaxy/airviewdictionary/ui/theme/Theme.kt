@@ -11,6 +11,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -28,6 +29,8 @@ private val LightColorScheme = lightColorScheme(
 //    onPrimary = ColorsLight.Primary100,
 //    primaryContainer = ColorsLight.Primary40,
 )
+
+val LocalAppDarkTheme = staticCompositionLocalOf { true }
 
 @Composable
 fun ScreenTranslatorTheme(
@@ -62,6 +65,7 @@ fun ScreenTranslatorTheme(
 //        shapes = shapes
     ) {
         CompositionLocalProvider(
+            LocalAppDarkTheme provides darkTheme,
             content = content
         )
     }

@@ -97,6 +97,10 @@ class SettingsViewModel @Inject constructor(
         preferenceRepository.update(PreferenceRepository.TTS_PITCH, pitch)
     }
 
+    fun updateUiDarkTheme(isDarkTheme: Boolean) {
+        preferenceRepository.update(PreferenceRepository.UI_DARK_THEME, isDarkTheme)
+    }
+
     fun playTtsVoicePreview(
         voice: Voice,
         sampleText: String = "It's a voice like this.",

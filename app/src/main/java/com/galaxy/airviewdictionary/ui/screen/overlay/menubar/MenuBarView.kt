@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -145,11 +147,14 @@ class MenuBarView private constructor() : OverlayView() {
             // screen capture 진행 상태의 flow
             val captureStatus by targetHandleViewModel.captureStatusFlow.collectAsStateWithLifecycle()
 
-            // target handle 모션 이벤트 flow
+            // Target handle 모션 이벤트 flow
             val targetHandleMotionEventState by targetHandleViewModel.motionEventFlow.collectAsStateWithLifecycle()
 
             // SettingsActivity live 상태 flow
             val settingsActivityLiveState by SettingsActivity.liveStateFlow.collectAsStateWithLifecycle()
+            
+            // LanguageListView live 상태 flow
+            val languageListViewLiveState by com.galaxy.airviewdictionary.ui.screen.overlay.languagelist.LanguageListView.liveStateFlow.collectAsStateWithLifecycle()
 
             // Drag handle dock state
             val dragHandleDockState by targetHandleViewModel.dockStateFlow.collectAsStateWithLifecycle()
@@ -168,6 +173,7 @@ class MenuBarView private constructor() : OverlayView() {
                 captureStatus,
                 targetHandleMotionEventState,
                 settingsActivityLiveState,
+                languageListViewLiveState,
                 dragHandleDockState,
                 textDetectMode,
                 fixedAreaViewState
@@ -175,6 +181,7 @@ class MenuBarView private constructor() : OverlayView() {
 
                 view?.let {
                     val menuVisible = when {
+                        languageListViewLiveState -> false
                         settingsActivityLiveState -> true
                         captureStatus != CaptureStatus.Requested
                                 && targetHandleMotionEventState != MotionEvent.ACTION_MOVE
@@ -240,7 +247,7 @@ class MenuBarView private constructor() : OverlayView() {
             }
 
             val menuConfig = when {
-                settingsActivityLiveState || captureStatus == CaptureStatus.PermissionRequested -> MenuConfig.WHOLE
+                captureStatus == CaptureStatus.PermissionRequested -> MenuConfig.WHOLE
                 else -> menuBarConfig
             }
 
@@ -734,17 +741,18 @@ fun MenuBar(
                         enter = enterTransition,
                         exit = exitTransition,
                         content = {
-                            Box(modifier = Modifier.width(languageViewWidth)) {
+                            Box(modifier = Modifier.width(languageViewWidth).height(48.dp)) {
                                 TextButton(
                                     onClick = { launchLanguageListView?.let { it(true) } },
                                     enabled = !isAnimatingSwapLanguage.value && launchLanguageListView != null,
                                     modifier = Modifier
+                                        .fillMaxSize()
                                         .graphicsLayer {
                                             alpha = languageTextAlpha.value
                                             translationX = if (isVerticalConfig) 1f else sourceTextOffset.value
                                             translationY = if (isVerticalConfig) sourceTextOffset.value else 1f
-                                        }
-                                        .align(Alignment.CenterEnd),
+                                        },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                                     colors = ButtonDefaults.textButtonColors(contentColor = contentColor),
                                 ) {
                                     Text(
@@ -804,16 +812,18 @@ fun MenuBar(
                         enter = enterTransition,
                         exit = exitTransition,
                         content = {
-                            Box(modifier = Modifier.width(languageViewWidth)) {
+                            Box(modifier = Modifier.width(languageViewWidth).height(48.dp)) {
                                 TextButton(
                                     onClick = { launchLanguageListView?.let { it(false) } },
                                     enabled = !isAnimatingSwapLanguage.value && launchLanguageListView != null,
                                     modifier = Modifier
+                                        .fillMaxSize()
                                         .graphicsLayer {
                                             alpha = languageTextAlpha.value
                                             translationX = if (isVerticalConfig) 1f else targetTextOffset.value
                                             translationY = if (isVerticalConfig) targetTextOffset.value else 1f
                                         },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
                                     colors = ButtonDefaults.textButtonColors(contentColor = contentColor),
                                 ) {
                                     Text(
