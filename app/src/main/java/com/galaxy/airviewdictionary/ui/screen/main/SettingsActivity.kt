@@ -56,6 +56,9 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PowerSettingsNew
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.VoiceChat
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Movie
@@ -68,6 +71,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -308,22 +313,67 @@ class SettingsActivity : AVDActivity() {
 //                        }
 //                    }
 
+                    var selectedTab by remember { mutableIntStateOf(0) }
+
                     Scaffold(
-                        snackbarHost = { SnackbarHost(hostState = snackBarHostState) }
+                        snackbarHost = { SnackbarHost(hostState = snackBarHostState) },
+                        bottomBar = {
+                            NavigationBar(
+                                containerColor = backgroundColor,
+                            ) {
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Home, contentDescription = "Trang chủ") },
+                                    label = { Text("Trang chủ") },
+                                    selected = selectedTab == 0,
+                                    onClick = { selectedTab = 0 }
+                                )
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Translate, contentDescription = "Dịch") },
+                                    label = { Text("Dịch") },
+                                    selected = selectedTab == 1,
+                                    onClick = { selectedTab = 1 }
+                                )
+                                NavigationBarItem(
+                                    icon = { Icon(Icons.Default.Settings, contentDescription = "Cài đặt") },
+                                    label = { Text("Cài đặt") },
+                                    selected = selectedTab == 2,
+                                    onClick = { selectedTab = 2 }
+                                )
+                            }
+                        }
                     ) { _paddingValues: PaddingValues ->
                         val paddingValues = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            PaddingValues()
+                            PaddingValues(bottom = _paddingValues.calculateBottomPadding())
                         } else {
                             _paddingValues
                         }
                         Box(
                             modifier = Modifier
+                                .fillMaxSize()
                                 .background(backgroundColor)
                                 .padding(paddingValues)
                         ) {
-                            Settings(
-                                paddingValues = paddingValues
-                            )
+                            when (selectedTab) {
+                                0 -> HomeTab(
+                                    viewModel = viewModel,
+                                    paddingValues = paddingValues,
+                                    screenTranslatorRunningFlow = screenTranslatorRunningFlow,
+                                    onStartStopClick = {
+                                        if (screenTranslatorRunningFlow.value) {
+                                            stopScreenTranslator()
+                                        } else {
+                                            requestScreenCaptureAndStart()
+                                        }
+                                    }
+                                )
+                                1 -> TranslateTab(
+                                    viewModel = viewModel,
+                                    paddingValues = paddingValues
+                                )
+                                2 -> Settings(
+                                    paddingValues = paddingValues
+                                )
+                            }
                         }
                     }
 

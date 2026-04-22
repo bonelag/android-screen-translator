@@ -41,6 +41,47 @@ class SettingsViewModel @Inject constructor(
         preferenceRepository.update(PreferenceRepository.IS_REVIEW_DONE, true)
     }
 
+    fun updateSourceLanguageCode(code: String) {
+        preferenceRepository.update(PreferenceRepository.SOURCE_LANGUAGE_CODE, code)
+    }
+
+    fun updateTargetLanguageCode(code: String) {
+        preferenceRepository.update(PreferenceRepository.TARGET_LANGUAGE_CODE, code)
+    }
+
+    fun updateTranslationKitType(kitType: TranslationKitType) {
+        preferenceRepository.update(PreferenceRepository.TRANSLATION_KIT_TYPE, kitType.name)
+    }
+
+    fun updateLanguage(isSourceLanguage: Boolean, language: com.galaxy.airviewdictionary.data.remote.translation.Language, oppositeLanguage: com.galaxy.airviewdictionary.data.remote.translation.Language) {
+        viewModelScope.launch {
+            val kitType: TranslationKitType = preferenceRepository.translationKitTypeFlow.first()
+            val commonKitTypes = mutableListOf<TranslationKitType>().apply {
+                if (language.supportKitTypes.contains(kitType) && oppositeLanguage.supportKitTypes.contains(kitType)) {
+                    add(kitType)
+                }
+                addAll(language.supportKitTypes.intersect(oppositeLanguage.supportKitTypes.toSet()).filter { it != kitType })
+            }
+
+            for (currentKitType in commonKitTypes) {
+                val isSupported = if (isSourceLanguage) {
+                    translationRepository.isSupportedAsSource(currentKitType, language.code, oppositeLanguage.code)
+                } else {
+                    translationRepository.isSupportedAsTarget(currentKitType, language.code, oppositeLanguage.code)
+                }
+                if (isSupported) {
+                    preferenceRepository.update(PreferenceRepository.TRANSLATION_KIT_TYPE, currentKitType.name)
+                    if (isSourceLanguage) {
+                        updateSourceLanguageCode(language.code)
+                    } else {
+                        updateTargetLanguageCode(language.code)
+                    }
+                    break
+                }
+            }
+        }
+    }
+
     fun updateDragHandleDocking(dragHandleDocking: Boolean) {
         preferenceRepository.update(PreferenceRepository.DRAG_HANDLE_DOCKING, dragHandleDocking)
     }
